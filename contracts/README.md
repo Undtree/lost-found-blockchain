@@ -14,10 +14,15 @@ cd contracts
 
 # 2. 初始化Hardhat项目
 npm init -y
-npm install --save-dev hardhat@^2.22.0 @nomicfoundation/hardhat-toolbox@^4.0.0 # 注意选择Type Script，其他默认
+npm install --save-dev hardhat@^2.22.0 @nomicfoundation/hardhat-toolbox@^4.0.0
+npx hardhat # 注意选择Type Script，其他默认
 
 # 3. 安装OpenZeppelin合约库 (必须)
 npm install @openzeppelin/contracts
+
+# 4. 删除示例合约和示例测试
+rm contracts/Lock.sol
+rm test/Lock.js
 ```
 
 ### clone 方操作
