@@ -20,7 +20,7 @@ npm install --save-dev hardhat@^2.22.0 @nomicfoundation/hardhat-toolbox@^4.0.0 #
 npm install @openzeppelin/contracts
 ```
 
-### Clone 方操作
+### clone 方操作
 
 ```
 # 下载Hardhat项目依赖
