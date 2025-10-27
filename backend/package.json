@@ -1,5 +1,5 @@
 {
-  "name": "lost-found-blockchain",
+  "name": "backend",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -8,10 +8,11 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Node.js/Express 服务器项目",
   "dependencies": {
+    "ethers": "^6.8.0",
     "express": "^5.1.0",
-    "mongoose": "^8.19.1",
-    "ethers": "^6.8.0"
-  }
+    "mongoose": "^8.19.1"
+  },
+  "type": "commonjs"
 }
