@@ -17,10 +17,37 @@ const itemSchema = new Schema({
     type: String,
     required: true
   },
+  // 拾获者链上地址
+  finderAddress: {
+    type: String,
+    required: true,
+    index: true
+  },
+  // 遗失者链上地址
+  losterAddress: {
+    type: String
+  },
   // 物品状态: 'lost' 表示丢失, 'found' 表示拾获
   status: {
     type: String,
+    enum: ['available', 'claimed'],
+    default: 'available'
+  },
+  // 用于存储图片的 URL
+  imageUrl: {
+    type: String,
+    required: false // 设置为非必填，允许发布没有图片的物品
+  },
+  // 物品在服务器上的元数据路径
+  metadataUrl:{
+    type: String,
     required: true
+  },
+  // 物品链上 Token ID
+  tokenId: {
+    type: String,
+    unique: true,
+    sparse: true
   }
 }, { timestamps: true }); // timestamps 会自动添加 createdAt 和 updatedAt 字段
 

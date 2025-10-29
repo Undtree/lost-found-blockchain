@@ -9,6 +9,8 @@ const app = express();
 // 3. 定义一个端口号
 const port = 3001; // 前端React/Vue项目默认经常使用3000
 
+const path = require('path');
+
 // 中间件，解析 JSON 请求体
 app.use(express.json());
 
@@ -28,6 +30,11 @@ mongoose.connect(dbURI)
     console.log('Failed to connect to MongoDB database:', err);
   });
 // --------------------
+
+// 访问 http://localhost:3001/uploads/img.jpg 就可以拿到图片
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// 访问 http://localhost:3001/metadata/1.json 就可以拿到元数据
+app.use('/metadata', express.static(path.join(__dirname, 'metadata')));
 
 // 当有人访问服务器的根路径 (/) 时，执行回调函数
 app.get('/', (req, res) => {
