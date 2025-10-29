@@ -1,0 +1,52 @@
+/* src/assets/theme.css */
+
+/* 定义莫兰迪色系的 CSS 变量 */
+:root {
+  --el-color-primary: #7a949a; /* 主色：灰蓝色 */
+  --el-color-primary-light-3: #9fb2b7;
+  --el-color-primary-light-5: #c5d0d3;
+  --el-color-primary-light-7: #e0e6e7;
+  --el-color-primary-light-9: #f4f6f6;
+  --el-color-primary-dark-2: #657e84;
+
+  --el-color-success: #81b29a; /* 成功：灰绿色 */
+  --el-color-warning: #f8ad9d; /* 警告：灰粉色 */
+  --el-color-danger: #e07a5f; /* 危险：暗红色 */
+  --el-color-info: #aebec0; /* 信息：浅灰蓝 */
+
+  /* 文本颜色也用莫兰迪色系 */
+  --el-text-color-primary: #4a5759;
+  --el-text-color-regular: #6b7d7f;
+  --el-text-color-secondary: #8e9fa1;
+  --el-text-color-placeholder: #aebec0;
+
+  /* 边框颜色 */
+  --el-border-color: #d8e1e3;
+  --el-border-color-light: #e6eded;
+  --el-border-color-lighter: #f2f5f6;
+  --el-border-color-extra-light: #f9fafa;
+}
+
+/* 按钮和卡片的一些通用美化 */
+.el-button {
+  border-radius: 4px; /* 稍微减少圆角 */
+  font-weight: 500;
+}
+
+.el-card {
+  border-radius: 8px; /* 卡片圆角，柔和一点 */
+  border: none; /* 移除默认边框 */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* 更柔和的阴影 */
+}
+
+.el-input__wrapper,
+.el-textarea__inner {
+  border-radius: 4px; /* 输入框也统一圆角 */
+}
+.el-alert {
+  border-radius: 4px;
+  margin-top: 10px; /* 警告框与上面元素的间距 */
+}
+.el-tag {
+  border-radius: 4px;
+}
