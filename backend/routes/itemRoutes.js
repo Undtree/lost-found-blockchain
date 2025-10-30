@@ -112,7 +112,6 @@ router.post('/items/upload', upload.single('image'), async (req, res) => {
   }
   
   // 5. 验证通过
-  // (从这里开始，所有代码保持不变)
   
   // 准备图片 URL 和元数据
   const imageUrl = `${BASE_URL}/uploads/${req.file.filename}`;
@@ -266,6 +265,9 @@ router.post('/items/:id/claim-db', async (req, res) => {
     if (item.status === 'claimed') {
       return res.status(200).json({ message: '该物品已被标记为认领', data: item });
     }
+    if (item.status === 'available') {
+      return res.status(400).json({ message: '操作无效：必须先执行链下批准 (approve)，使物品状态变为 "pending_handover"' });
+    }
   } catch (dbErr) {
     return res.status(500).json({ message: '数据库查询失败', error: dbErr });
   }
@@ -350,11 +352,15 @@ router.post('/items/:id/submit-claim', async (req, res) => {
     if (item.status === 'claimed') {
       return res.status(400).json({ message: '该物品已被认领' });
     }
+    if (item.status === 'pending_handover') {
+      return res.status(400).json({ message: '该物品正在等待交接，暂不接受新申请' });
+    }
 
     // 4. 防止重复提交
     const existingClaimIndex = item.claims.findIndex(
       c => c.applierAddress.toLowerCase() === applierAddress.toLowerCase()
     );
+
     if (existingClaimIndex > -1) {
       // 已经存在申请
       const existingClaim = item.claims[existingClaimIndex];
@@ -447,6 +453,118 @@ router.post('/items/:id/claims/:claimId/reject', async (req, res) => {
 
   } catch (err) {
     res.status(500).json({ message: '拒绝申请失败', error: err });
+  }
+});
+
+// POST /items/:id/claims/:claimId/approve - 批准他人申请
+router.post('/items/:id/claims/:claimId/approve', async (req, res) => {
+  const { id: itemId, claimId } = req.params;
+  const { finderAddress, signature, signatureMessage } = req.body;
+
+  // 1. 验证签名 (确保是 Finder)
+  if (!finderAddress || !signature || !signatureMessage) {
+    return res.status(400).json({ message: '缺少 Finder 签名认证' });
+  }
+  let recoveredAddress;
+  try {
+    recoveredAddress = ethers.verifyMessage(signatureMessage, signature);
+  } catch (e) {
+    return res.status(400).json({ message: '签名格式无效' });
+  }
+  if (recoveredAddress.toLowerCase() !== finderAddress.toLowerCase()) {
+    return res.status(403).json({ message: '签名验证失败' });
+  }
+
+  // 2. 查找物品
+  try {
+    const item = await Item.findById(itemId);
+    if (!item) return res.status(404).json({ message: '未找到物品' });
+
+    // 3. 验证签名者是否为 Finder
+    if (item.finderAddress.toLowerCase() !== finderAddress.toLowerCase()) {
+      return res.status(403).json({ message: '你不是该物品的拾物者' });
+    }
+    
+    // 4. 检查物品状态
+    if (item.status !== 'available') {
+        return res.status(400).json({ message: '物品不处于 "available" 状态' });
+    }
+
+    const claimToApprove = item.claims.id(claimId);
+    if (!claimToApprove || claimToApprove.status !== 'pending') {
+      return res.status(400).json({ message: '该申请不是 "pending" 状态' });
+    }
+
+    // 5. [核心] 执行批准
+    item.status = 'pending_handover'; // 锁定物品
+    
+    item.claims.forEach(claim => {
+      if (claim._id.equals(claimToApprove._id)) {
+        claim.status = 'approved';
+      } else if (claim.status === 'pending') {
+        // 自动拒绝其他所有待处理的
+        claim.status = 'rejected'; 
+      }
+    });
+
+    await item.save();
+    res.status(200).json({ message: '链下批准成功，等待交接', data: item });
+
+  } catch (err) {
+    res.status(500).json({ message: '批准失败', error: err });
+  }
+});
+
+/// POST /items/:id/cancel-handover - 取消物品交接
+router.post('/items/:id/cancel-handover', async (req, res) => {
+  const { id: itemId } = req.params;
+  const { finderAddress, signature, signatureMessage } = req.body;
+
+  // 1. 验证签名 (确保是 Finder)
+  if (!finderAddress || !signature || !signatureMessage) {
+    return res.status(400).json({ message: '缺少 Finder 签名认证' });
+  }
+  let recoveredAddress;
+  try {
+    recoveredAddress = ethers.verifyMessage(signatureMessage, signature);
+  } catch (e) {
+    return res.status(400).json({ message: '签名格式无效' });
+  }
+  if (recoveredAddress.toLowerCase() !== finderAddress.toLowerCase()) {
+    return res.status(403).json({ message: '签名验证失败' });
+  }
+
+  // 2. 查找物品
+  try {
+    const item = await Item.findById(itemId);
+    if (!item) return res.status(404).json({ message: '未找到物品' });
+
+    // 3. 验证签名者是否为 Finder
+    if (item.finderAddress.toLowerCase() !== finderAddress.toLowerCase()) {
+      return res.status(403).json({ message: '你不是该物品的拾物者' });
+    }
+    
+    // 4. 检查物品状态
+    if (item.status !== 'pending_handover') {
+        return res.status(400).json({ message: '物品不处于 "pending_handover" 状态，无法取消' });
+    }
+
+    // 5. 【核心】执行回滚
+    item.status = 'available'; // 状态回滚
+    
+    // 逻辑：我们将所有“已批准”和“被自动拒绝”的申请全部重置为“待定”
+    // 这样 Finder 就可以重新审核所有人
+    item.claims.forEach(claim => {
+      if (claim.status === 'approved' || claim.status === 'rejected') {
+        claim.status = 'pending';
+      }
+    });
+
+    await item.save();
+    res.status(200).json({ message: '交接已取消，物品已重新开放审核', data: item });
+
+  } catch (err) {
+    res.status(500).json({ message: '取消失败', error: err });
   }
 });
 
