@@ -91,7 +91,7 @@ router.post('/items/upload', upload.single('image'), async (req, res) => {
     return res.status(400).json({ message: '缺少字段 (name, description, location, finderAddress)' });
   }
 
-  // 3. (新增) 安全验证守卫
+  // 3. 安全验证守卫
   if (!signature || !signatureMessage) {
     return res.status(403).json({ message: '缺少身份验证签名 (Signature)' });
   }
@@ -104,7 +104,7 @@ router.post('/items/upload', upload.single('image'), async (req, res) => {
     return res.status(400).json({ message: '签名格式无效' });
   }
   
-  // 4. (新增) 验证签名是否匹配
+  // 4. 验证签名是否匹配
   if (recoveredAddress.toLowerCase() !== finderAddress.toLowerCase()) {
     return res.status(403).json({ 
       message: '签名验证失败：finderAddress 与签名者不匹配。' 
@@ -351,7 +351,7 @@ router.post('/items/:id/submit-claim', async (req, res) => {
       return res.status(400).json({ message: '该物品已被认领' });
     }
 
-    // 4. (新增) 防止重复提交
+    // 4. 防止重复提交
     const existingClaimIndex = item.claims.find(
       c => c.applierAddress.toLowerCase() === applierAddress.toLowerCase()
     );
@@ -436,7 +436,7 @@ router.post('/items/:id/claims/:claimId/reject', async (req, res) => {
 
     // 5. 检查状态
     if (claim.status !== 'pending') {
-      return res.status(400).json({ message: `该申请已处于 "${claim.status}" 状态，无法拒绝` });
+      return res.status(400).json({ message: '该申请已处于 "${claim.status}" 状态，无法拒绝' });
     }
 
     // 6. 执行拒绝
