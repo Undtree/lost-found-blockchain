@@ -1,6 +1,17 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
+const claimSchema = new Schema({
+  applierAddress: { type: String, required: true },
+  secretMessage: { type: String, required: true },
+  
+  status: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected'],
+    default: 'pending'
+  }
+}, { timestamps: true }); // 'createdAt' 会告诉我们申请提交的时间
+
 const itemSchema = new Schema({
   // 物品名称
   name: {
@@ -48,7 +59,9 @@ const itemSchema = new Schema({
     type: String,
     unique: true,
     sparse: true
-  }
+  },
+
+  claims: [claimSchema]
 }, { timestamps: true }); // timestamps 会自动添加 createdAt 和 updatedAt 字段
 
 // 基于这个 Schema 创建一个模型 (Model)

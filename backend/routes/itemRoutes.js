@@ -296,7 +296,18 @@ router.post('/items/:id/claim-db', async (req, res) => {
   // 4. 验证通过！更新数据库 
   try {
     item.status = 'claimed';
-    item.losterAddress = onChainOwner; 
+    item.losterAddress = onChainOwner;
+
+    // 更新 Claims 状态
+    item.claims.forEach(claim => {
+      if (claim.applierAddress.toLowerCase() === onChainOwner.toLowerCase()) {
+        claim.status = 'approved';
+      } else if (claim.status === 'pending') {
+        // 物品已被认领，自动拒绝其他所有待处理的申请
+        claim.status = 'rejected';
+      }
+    });
+
     const updatedItem = await item.save();
     
     res.status(200).json({ message: '物品状态校验成功，更新为\'claimed\'', data: updatedItem });
@@ -306,7 +317,7 @@ router.post('/items/:id/claim-db', async (req, res) => {
   }
 });
 
-// 核心新增: POST /items/:id/submit-claim 路由
+// POST /items/:id/submit-claim 路由
 router.post('/items/:id/submit-claim', async (req, res) => {
   const { id } = req.params;
   const { applierAddress, secretMessage, signature, signatureMessage } = req.body;
@@ -341,27 +352,101 @@ router.post('/items/:id/submit-claim', async (req, res) => {
     }
 
     // 4. (新增) 防止重复提交
-    const existingClaim = item.claims.find(
+    const existingClaimIndex = item.claims.find(
       c => c.applierAddress.toLowerCase() === applierAddress.toLowerCase()
     );
-    if (existingClaim) {
-      return res.status(409).json({ message: '你已经提交过申请，请等待拾物者审核' });
-    }
+    if (existingClaimIndex > -1) {
+      // 已经存在申请
+      const existingClaim = item.claims[existingClaimIndex];
 
-    // 5. 将新申请推入数组
-    const newClaim = {
-      applierAddress: applierAddress,
-      secretMessage: secretMessage
-    };
-    
-    item.claims.push(newClaim);
-    await item.save();
-    
-    // 返回更新后的物品 (包含新的 claims 列表)
-    res.status(201).json({ message: '认领申请提交成功', data: item });
+      if (existingClaim.status === 'pending') {
+        return res.status(409).json({ message: '你已提交过申请，请等待拾物者审核' });
+      }
+
+      if (existingClaim.status === 'approved') {
+        return res.status(400).json({ message: '你的申请已被批准' });
+      }
+
+      if (existingClaim.status === 'rejected') {
+        // 重新申请
+        // 更新旧的、被拒绝的申请，重置为 pending
+        existingClaim.secretMessage = secretMessage;
+        existingClaim.status = 'pending';
+        await item.save();
+        return res.status(200).json({ message: '重新申请提交成功', data: item });
+      }
+
+    } else {
+      // 首次申请
+      // 5. 将新申请推入数组
+      const newClaim = {
+        applierAddress: applierAddress,
+        secretMessage: secretMessage,
+        status: 'pending' // 默认为 'pending'
+      };
+      item.claims.push(newClaim);
+      await item.save();
+      // 返回更新后的物品
+      res.status(201).json({ message: '认领申请提交成功', data: item });
+    }
 
   } catch (err) {
     res.status(500).json({ message: '提交申请失败', error: err });
+  }
+});
+
+// POST /items/:id/submit-claim 路由 - 拒绝他人申请
+router.post('/items/:id/claims/:claimId/reject', async (req, res) => {
+  const { id: itemId, claimId } = req.params;
+  const { finderAddress, signature, signatureMessage } = req.body;
+
+  // 1. 验证签名 (确保操作者是他们声称的那个人)
+  if (!finderAddress || !signature || !signatureMessage) {
+    return res.status(400).json({ message: '缺少 Finder 签名认证' });
+  }
+
+  let recoveredAddress;
+  try {
+    recoveredAddress = ethers.verifyMessage(signatureMessage, signature);
+  } catch (e) {
+    return res.status(400).json({ message: '签名格式无效' });
+  }
+
+  if (recoveredAddress.toLowerCase() !== finderAddress.toLowerCase()) {
+    return res.status(403).json({ message: '签名验证失败' });
+  }
+
+  // 2. 查找物品
+  try {
+    const item = await Item.findById(itemId);
+    if (!item) {
+      return res.status(404).json({ message: '未找到物品' });
+    }
+
+    // 3. [安全] 验证签名者是否为物品的 Finder
+    if (item.finderAddress.toLowerCase() !== finderAddress.toLowerCase()) {
+      return res.status(403).json({ message: '你不是该物品的拾物者，无权操作' });
+    }
+
+    // 4. 查找特定的 Claim
+    const claim = item.claims.id(claimId); // Mongoose sub-document finder
+    if (!claim) {
+      return res.status(404).json({ message: '未找到该条申请' });
+    }
+
+    // 5. 检查状态
+    if (claim.status !== 'pending') {
+      return res.status(400).json({ message: `该申请已处于 "${claim.status}" 状态，无法拒绝` });
+    }
+
+    // 6. 执行拒绝
+    claim.status = 'rejected';
+    await item.save(); // 保存父文档
+
+    res.status(200).json({ message: '申请已拒绝', data: item });
+
+  } catch (err) {
+    res.status(500).json({ message: '拒绝申请失败', error: err });
   }
 });
 
