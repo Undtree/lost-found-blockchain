@@ -16,7 +16,7 @@ const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS || '';
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3001';
 
 // 读取合约 ABI（使用 Hardhat artifacts 生成的 JSON）
-const artifactPath = path.resolve(__dirname, '..', 'contracts', 'LostItemNFT.json');
+const artifactPath = path.resolve(__dirname, '..', '..', 'contracts', 'artifacts', 'contracts', 'LostItemNFT.sol', 'LostItemNFT.json');
 let contractAbi = null;
 try {
   const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
@@ -47,7 +47,7 @@ function getContract(signerOrProvider) {
 // 当合约未配置时提供错误信息
 function contractNotReady(res) {
   return res.status(500).json({
-    message: '合约未配置或 ABI 缺失。请设置 RPC_URL, PRIVATE_KEY, CONTRACT_ADDRESS 并确保合约已编译。'
+    message: '合约未配置或 ABI 缺失。请检查 .env 文件 (PRIVATE_KEY, CONTRACT_ADDRESS)'
   });
 }
 
@@ -68,7 +68,7 @@ const storage = multer.diskStorage({
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1E9);
-    cb(null. uniqueSuffix + path.extname(file.originalname));
+    cb(null, uniqueSuffix + path.extname(file.originalname));
   }
 });
 const upload = multer({ storage: storage});
@@ -207,7 +207,7 @@ router.post('/items/upload', upload.single('image'), async (req, res) => {
 // GET /items - 列出 DB 中的物品（不查询链）
 router.get('/items', async (req, res) => {
   try {
-    const items = await Item.find();
+    const items = await Item.find().sort({ createdAt: -1 });
     res.status(200).json({ message: '成功获取物品列表', data: items });
   } catch (err) {
     res.status(500).json({ message: '获取物品列表失败', error: err });
@@ -247,7 +247,7 @@ router.get('/items/my-items/:address', async (req, res) => {
   }
 });
 
-// --- POST /claim-db 路由
+// POST /items/:id/claim-db 路由
 router.post('/items/:id/claim-db', async (req, res) => {
   const { losterAddress } = req.body;
   const { id } = req.params; 
@@ -352,7 +352,7 @@ router.post('/items/:id/submit-claim', async (req, res) => {
     }
 
     // 4. 防止重复提交
-    const existingClaimIndex = item.claims.find(
+    const existingClaimIndex = item.claims.findIndex(
       c => c.applierAddress.toLowerCase() === applierAddress.toLowerCase()
     );
     if (existingClaimIndex > -1) {
@@ -395,7 +395,7 @@ router.post('/items/:id/submit-claim', async (req, res) => {
   }
 });
 
-// POST /items/:id/submit-claim 路由 - 拒绝他人申请
+// POST /items/:id/claims/:claimId/reject - 拒绝他人申请
 router.post('/items/:id/claims/:claimId/reject', async (req, res) => {
   const { id: itemId, claimId } = req.params;
   const { finderAddress, signature, signatureMessage } = req.body;
@@ -436,7 +436,7 @@ router.post('/items/:id/claims/:claimId/reject', async (req, res) => {
 
     // 5. 检查状态
     if (claim.status !== 'pending') {
-      return res.status(400).json({ message: '该申请已处于 "${claim.status}" 状态，无法拒绝' });
+      return res.status(400).json({ message: `该申请已处于 "${claim.status}" 状态，无法拒绝` });
     }
 
     // 6. 执行拒绝

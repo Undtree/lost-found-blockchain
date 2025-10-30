@@ -1,10 +1,14 @@
+require('dotenv').config()
+
 // 1. 引入 express
 const express = require('express');
 const mongoose = require('mongoose');
 const itemRoutes = require('./routes/itemRoutes');
+const cors = require('cors');
 
 // 2. 创建应用对象
 const app = express();
+app.use(cors());
 
 // 3. 定义一个端口号
 const port = 3001; // 前端React/Vue项目默认经常使用3000
