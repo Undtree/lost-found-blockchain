@@ -61,4 +61,14 @@ export default {
   submitClaim(id, claimData) {
     return apiClient.post(`/items/${id}/submit-claim`, claimData)
   },
+
+  /**
+   * 拒绝一个认领申请 (Finder 调用)
+   * @param {string} itemId - 物品的 _id
+   * @param {string} claimId - 申请的 _id
+   * @param {object} data - 包含 { finderAddress, signature, signatureMessage }
+   */
+  rejectClaim(itemId, claimId, data) {
+    return apiClient.post(`/items/${itemId}/claims/${claimId}/reject`, data)
+  },
 }
