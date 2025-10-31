@@ -41,7 +41,7 @@ const itemSchema = new Schema({
   // 物品状态: 'lost' 表示丢失, 'found' 表示拾获
   status: {
     type: String,
-    enum: ['available', 'claimed'],
+    enum: ['available', 'pending_handover', 'claimed'],
     default: 'available'
   },
   // 用于存储图片的 URL

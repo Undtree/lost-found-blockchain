@@ -54,6 +54,14 @@ export default {
   },
 
   /**
+   * 获取当前连接的钱包所申请的物品
+   * @param {string} address - 申请者的钱包地址
+   */
+  getMyClaims(address) {
+    return apiClient.get(`/items/my-claims/${address}`)
+  },
+
+  /**
    * 提交认领申请 (失主 Loster 调用)
    * @param {string} id - 物品的 _id
    * @param {object} claimData - 包含 { applierAddress, secretMessage, signature, signatureMessage }
@@ -70,5 +78,24 @@ export default {
    */
   rejectClaim(itemId, claimId, data) {
     return apiClient.post(`/items/${itemId}/claims/${claimId}/reject`, data)
+  },
+
+  /**
+   * 批准一个认领申请 (Finder 调用, 链下)
+   * @param {string} itemId
+   * @param {string} claimId
+   * @param {object} data - 包含 { finderAddress, signature, signatureMessage }
+   */
+  approveClaim(itemId, claimId, data) {
+    return apiClient.post(`/items/${itemId}/claims/${claimId}/approve`, data)
+  },
+
+  /**
+   * 取消交接 (Finder 调用, 链下)
+   * @param {string} itemId
+   * @param {object} data - 包含 { finderAddress, signature, signatureMessage }
+   */
+  cancelHandover(itemId, data) {
+    return apiClient.post(`/items/${itemId}/cancel-handover`, data)
   },
 }

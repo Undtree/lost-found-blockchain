@@ -52,6 +52,21 @@ function contractNotReady(res) {
 }
 
 // --- 配置 Multer ---
+
+// 定义一个文件过滤器函数，用于检查文件类型
+const imageFileFilter = (req, file, cb) => {
+  // 定义允许的图片 MIME 类型
+  const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/heif', 'image/webp'];
+
+  if (allowedMimes.includes(file.mimetype)) {
+    // 如果文件类型被允许，则接受该文件
+    cb(null, true);
+  } else {
+    // 如果文件类型不被允许，则拒绝该文件，并传递一个错误信息
+    cb(new Error('不支持的文件类型！仅允许上传 jpg, jpeg, png, heif, webp 格式的图片。'), false);
+  }
+};
+
 const uploadDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
@@ -71,7 +86,14 @@ const storage = multer.diskStorage({
     cb(null, uniqueSuffix + path.extname(file.originalname));
   }
 });
-const upload = multer({ storage: storage});
+
+const upload = multer({
+  storage: storage, // 文件存储配置
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 限制文件大小为 5MB (5 * 1024 * 1024 bytes)
+  },
+  fileFilter: imageFileFilter // 文件类型过滤函数
+});
 // ------
 
 // POST /items - 保存到 DB 并在链上 mint NFT（如果配置了合约）
@@ -246,6 +268,28 @@ router.get('/items/my-items/:address', async (req, res) => {
   }
 });
 
+// GET /my-claims/:address - 查看自己的申请
+router.get('/items/my-claims/:address', async (req, res) => {
+  const { address } = req.params;
+  
+  // 1. 验证地址
+  if (!ethers.isAddress(address)) {
+    return res.status(400).json({ message: 'Invalid Ethereum address format' });
+  }
+
+  try {
+    // 2. 查询: 查找 'claims' 数组中 'applierAddress' 字段与
+    //    传入地址匹配（不区分大小写）的所有 Item
+    const items = await Item.find({ 
+      'claims.applierAddress': new RegExp(`^${address}$`, 'i') 
+    }).sort({ createdAt: -1 }); // 按物品创建时间倒序
+
+    res.status(200).json({ message: 'Successfully fetched user claims', data: items });
+  } catch (err) {
+    res.status(500).json({ message: 'DB query failed', error: err });
+  }
+});
+
 // POST /items/:id/claim-db 路由
 router.post('/items/:id/claim-db', async (req, res) => {
   const { losterAddress } = req.body;
@@ -290,7 +334,7 @@ router.post('/items/:id/claim-db', async (req, res) => {
   }
   if (onChainOwner.toLowerCase() !== losterAddress.toLowerCase()) {
     return res.status(403).json({ 
-      message: 'V验证失败：链上所有者地址与提供的失主地址不匹配。',
+      message: '验证失败：链上所有者地址与提供的失主地址不匹配。',
       onChainOwner: onChainOwner
     });
   }

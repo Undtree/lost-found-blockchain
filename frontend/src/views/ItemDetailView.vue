@@ -26,11 +26,8 @@
                   <div class="custom-descriptions-row">
                     <div class="custom-descriptions-label">状态</div>
                     <div class="custom-descriptions-value">
-                      <el-tag
-                        :type="item.status === 'available' ? 'success' : 'info'"
-                        disable-transitions
-                      >
-                        {{ item.status === 'available' ? '可认领' : '已认领' }}
+                      <el-tag :type="itemStatusType" disable-transitions>
+                        {{ itemStatusText }}
                       </el-tag>
                     </div>
                   </div>
@@ -48,10 +45,12 @@
                       <span class="address-text">{{ item.finderAddress }}</span>
                     </div>
                   </div>
-                  <div class="custom-descriptions-row" v-if="item.status === 'claimed'">
-                    <div class="custom-descriptions-label">认领者 (Loster)</div>
+                  <div class="custom-descriptions-row" v-if="item.status !== 'available'">
+                    <div class="custom-descriptions-label">
+                      {{ item.status === 'claimed' ? '认领者 (Loster)' : '批准的认领者' }}
+                    </div>
                     <div class="custom-descriptions-value">
-                      <span class="address-text">{{ item.losterAddress }}</span>
+                      <span class="address-text">{{ losterToShow }}</span>
                     </div>
                   </div>
                 </div>
@@ -59,56 +58,88 @@
             </el-col>
           </el-row>
 
-          <el-card shadow="always" class="action-card-wrapper" v-if="isAvailable">
+          <el-card shadow="always" class="action-card-wrapper">
             <div class="action-area">
-              <div
-                v-if="
-                  !isFinder &&
-                  (myCurrentClaimStatus === null || myCurrentClaimStatus === 'rejected')
-                "
-              >
-                <el-alert
-                  v-if="myCurrentClaimStatus === 'rejected'"
-                  title="申请未通过"
-                  type="error"
-                  description="你上次提交的申请已被拾物者拒绝。请核对关键信息后重新提交。"
-                  :closable="false"
-                  style="margin-bottom: 15px"
-                />
-                <el-alert
-                  v-if="myCurrentClaimStatus === null"
-                  title="你是失主吗？"
-                  type="info"
-                  description="请提供关键信息（例如：物品的独特标记、颜色、挂件等）以证明你是失主。"
-                  :closable="false"
-                  style="margin-bottom: 15px"
-                />
-                <el-button
-                  type="primary"
-                  size="large"
-                  @click="applyDialogVisible = true"
-                  :disabled="!account"
-                >
-                  {{
-                    account
-                      ? myCurrentClaimStatus === 'rejected'
-                        ? '重新申请认领'
-                        : '我来申请认领'
-                      : '请先连接钱包'
-                  }}
-                </el-button>
+              <div v-if="!isFinder && isAvailable">
+                <div v-if="myCurrentClaimStatus === null || myCurrentClaimStatus === 'rejected'">
+                  <el-alert
+                    v-if="myCurrentClaimStatus === 'rejected'"
+                    title="申请未通过"
+                    type="error"
+                    description="你上次提交的申请已被拾物者拒绝。请核对关键信息后重新提交。"
+                    :closable="false"
+                    style="margin-bottom: 15px"
+                  />
+                  <el-alert
+                    v-if="myCurrentClaimStatus === null"
+                    title="你是失主吗？"
+                    type="info"
+                    description="请提供关键信息（例如：物品的独特标记、颜色、挂件等）以证明你是失主。"
+                    :closable="false"
+                    style="margin-bottom: 15px"
+                  />
+                  <el-button
+                    type="primary"
+                    size="large"
+                    @click="applyDialogVisible = true"
+                    :disabled="!account"
+                  >
+                    {{ account ? (myCurrentClaimStatus === 'rejected' ? '重新申请认领' : '我来申请认领') : '请先连接钱包' }}
+                  </el-button>
+                </div>
+                <div v-if="myCurrentClaimStatus === 'pending'">
+                  <el-alert
+                    title="申请已提交"
+                    type="success"
+                    description="你的认领申请已提交，请等待拾物者审核。"
+                    :closable="false"
+                  />
+                </div>
               </div>
-              <div v-if="!isFinder && myCurrentClaimStatus === 'pending'">
+
+              <div v-if="!isFinder && isPendingHandover">
                 <el-alert
-                  title="申请已提交"
+                  v-if="myCurrentClaimStatus === 'approved'"
+                  title="你的申请已批准！"
                   type="success"
-                  description="你的认领申请已提交，请等待拾物者审核并转移 NFT。"
+                  description="你的申请已通过！请等待拾物者与你联系（或按约定）进行线下交接。"
+                  :closable="false"
+                />
+                <el-alert
+                  v-if="myCurrentClaimStatus === 'rejected' || myCurrentClaimStatus === 'pending' || myCurrentClaimStatus === null"
+                  title="物品正在等待交接"
+                  type="info"
+                  description="拾物者已批准了另一份申请，正在等待线下交接。"
                   :closable="false"
                 />
               </div>
+
+              <div v-if="!isFinder && item.status === 'claimed'">
+                <el-alert
+                  v-if="account && item.losterAddress && account.toLowerCase() === item.losterAddress.toLowerCase()"
+                  title="恭喜，你已成功认领！"
+                  type="success"
+                  description="此物品的 NFT 已转移到你的钱包，认领流程已结束。"
+                  :closable="false"
+                />
+                <el-alert
+                  v-else
+                  title="物品已被认领"
+                  type="info"
+                  description="此物品已被其他失主认领，流程已结束。"
+                  :closable="false"
+                />
+              </div>
+
               <div v-if="isFinder">
-                <h3 class="action-area-title">审核认领申请</h3>
-                <el-empty v-if="!claims || claims.length === 0" description="暂无认领申请" />
+                <h3 class="action-area-title" v-if="isAvailable">审核认领申请</h3>
+                <h3 class="action-area-title" v-if="isPendingHandover">等待交接</h3>
+                <h3 class="action-area-title" v-if="item.status === 'claimed'">交割完成</h3>
+
+                <el-empty
+                  v-if="!claims || claims.length === 0"
+                  description="暂无申请记录"
+                />
                 <el-card shadow="never" v-if="claims.length > 0" class="claim-list-card">
                   <el-table :data="claims" style="width: 100%">
                     <el-table-column label="申请人 (Loster)">
@@ -142,15 +173,16 @@
                         </el-tag>
                       </template>
                     </el-table-column>
-                    <el-table-column label="操作" width="200" align="center">
+
+                    <el-table-column label="操作" width="220" align="center">
                       <template #default="scope">
-                        <div v-if="scope.row.status === 'pending'">
+                        <div v-if="isAvailable && scope.row.status === 'pending'" class="action-button-group">
                           <el-button
                             type="primary"
                             :loading="approveLoadingId === scope.row._id"
-                            @click="handleApprove(scope.row)"
+                            @click="handleApproveStage1(scope.row)"
                           >
-                            批准
+                            批准 (链下)
                           </el-button>
                           <el-button
                             type="danger"
@@ -160,8 +192,27 @@
                             拒绝
                           </el-button>
                         </div>
-                        <span v-else>
-                          {{ scope.row.status === 'approved' ? '已批准认领' : '已处理' }}
+                        <div v-if="isPendingHandover && scope.row.status === 'approved'" class="action-button-group">
+                          <el-button
+                            type="success"
+                            :loading="finalizeLoadingId === scope.row._id"
+                            @click="handleApproveStage2_Finalize(scope.row)"
+                          >
+                            确认交割
+                          </el-button>
+                          <el-button
+                            type="warning"
+                            plain
+                            :loading="cancelLoadingId === scope.row._id"
+                            @click="handleCancelHandover()"
+                          >
+                            取消
+                          </el-button>
+                        </div>
+                        <span
+                          v-if="!( (isAvailable && scope.row.status === 'pending') || (isPendingHandover && scope.row.status === 'approved') )"
+                        >
+                          {{ item.status === 'claimed' ? '流程结束' : '已处理' }}
                         </span>
                       </template>
                     </el-table-column>
@@ -213,7 +264,6 @@
 </template>
 
 <script setup>
-// [!! <script setup> 部分完全保持不变 !!]
 import { ref, onMounted, computed, toRaw, watch, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ethers } from 'ethers'
@@ -228,36 +278,30 @@ const route = useRoute()
 const router = useRouter()
 const item = ref(null)
 const loading = ref(true)
-// const claimLoading = ref(false)
+
+// [!! 核心修改: 细分 Loading !!]
 const approveLoadingId = ref(null)
 const rejectLoadingId = ref(null)
+const finalizeLoadingId = ref(null)
+const cancelLoadingId = ref(null)
+
 const applyLoading = ref(false)
 const applyDialogVisible = ref(false)
 const secretMessage = ref('')
-// [!! 核心修复 !!] 必须调用 useEthers() 函数
 const { account, signer } = useEthers()
-const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3'
+const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3' // 确保地址正确
 
-// --- 预览器状态 ---
+// --- 预览器状态 (保持不变) ---
 const isPreviewVisible = ref(false)
-const openPreview = () => {
-  isPreviewVisible.value = true
-}
-const closePreview = () => {
-  isPreviewVisible.value = false
-}
+const openPreview = () => { isPreviewVisible.value = true }
+const closePreview = () => { isPreviewVisible.value = false }
 watch(isPreviewVisible, (newVal) => {
-  if (newVal) {
-    document.body.style.overflow = 'hidden'
-  } else {
-    document.body.style.overflow = ''
-  }
+  if (newVal) { document.body.style.overflow = 'hidden' } 
+  else { document.body.style.overflow = '' }
 })
-onUnmounted(() => {
-  document.body.style.overflow = ''
-})
+onUnmounted(() => { document.body.style.overflow = '' })
 
-// --- 计算属性 ---
+// --- 计算属性 (核心修改) ---
 const isFinder = computed(() => {
   return (
     account.value &&
@@ -265,20 +309,63 @@ const isFinder = computed(() => {
     account.value.toLowerCase() === item.value.finderAddress.toLowerCase()
   )
 })
+
 const isAvailable = computed(() => {
   return item.value && item.value.status === 'available'
 })
+
+// [!! 新增 !!]
+const isPendingHandover = computed(() => {
+  return item.value && item.value.status === 'pending_handover'
+})
+
 const claims = computed(() => {
   return item.value?.claims || []
 })
+
 const myCurrentClaimStatus = computed(() => {
-  if (!account.value || !item.value || !item.value.claims) {
-    return null // Not connected or no claims on item
+  if (!account.value || !claims.value) {
+    return null; 
   }
-  const myClaim = item.value.claims.find(
-    (c) => c.applierAddress.toLowerCase() === account.value.toLowerCase(),
-  )
-  return myClaim ? myClaim.status : null // 'pending', 'rejected', 'approved', or null
+  const myClaim = claims.value.find(
+    (c) => c.applierAddress.toLowerCase() === account.value.toLowerCase()
+  );
+  return myClaim ? myClaim.status : null; // 'pending', 'rejected', 'approved', or null
+})
+
+// [!! 新增 !!]
+const itemStatusText = computed(() => {
+  if (!item.value) return ''
+  switch (item.value.status) {
+    case 'available': return '可认领'
+    case 'pending_handover': return '等待交接'
+    case 'claimed': return '已认领'
+    default: return '未知'
+  }
+})
+
+// [!! 新增 !!]
+const itemStatusType = computed(() => {
+  if (!item.value) return 'info'
+  switch (item.value.status) {
+    case 'available': return 'success'
+    case 'pending_handover': return 'warning'
+    case 'claimed': return 'info'
+    default: return 'info'
+  }
+})
+
+// [!! 新增 !!]
+const losterToShow = computed(() => {
+  if (!item.value) return ''
+  if (item.value.status === 'claimed') {
+    return item.value.losterAddress
+  }
+  if (item.value.status === 'pending_handover') {
+    const approvedClaim = claims.value.find(c => c.status === 'approved')
+    return approvedClaim ? approvedClaim.applierAddress : '错误：未找到批准者'
+  }
+  return ''
 })
 
 // --- 核心方法 ---
@@ -288,6 +375,7 @@ const fetchItem = async () => {
     loading.value = false
     return
   }
+  loading.value = true
   try {
     const response = await itemService.getItemById(id)
     item.value = response.data.data
@@ -300,6 +388,7 @@ const fetchItem = async () => {
 }
 onMounted(fetchItem)
 
+// --- (Loster) 提交申请 (保持不变) ---
 const handleSubmitApplication = async () => {
   if (!secretMessage.value) {
     ElNotification.error('请输入关键信息')
@@ -352,24 +441,118 @@ const handleSubmitApplication = async () => {
   }
 }
 
-const handleApprove = async (claim) => {
-  const losterAddressToReceive = claim.applierAddress
-  const itemToClaim = item.value
-  const claimToApprove = claim
+// --- (Finder) 方法 ---
 
-  // claimLoading.value = true
-  approveLoadingId.value = claimToApprove._id
+// [!! 新增 !!] 阶段一：链下批准
+const handleApproveStage1 = async (claim) => {
+  approveLoadingId.value = claim._id;
 
   if (!signer.value || !account.value) {
     ElNotification.error('请先连接你的钱包！')
-    // claimLoading.value = false
     approveLoadingId.value = null
+    return
+  }
+  
+  // 1. 签名
+  let signature;
+  const messageToSign = `我 (Finder: ${account.value}) 确认批准认领申请 (Claim ID: ${claim._id})`
+  try {
+    const rawSigner = toRaw(signer.value)
+    if (!rawSigner) throw new Error('Signer 无效')
+    ElNotification.info('请在钱包中签名以确认批准...')
+    signature = await rawSigner.signMessage(messageToSign)
+  } catch (err) {
+    console.error('签名失败:', err)
+    ElNotification.error('您取消了签名，或签名失败')
+    approveLoadingId.value = null
+    return
+  }
+
+  // 2. 发送到后端 (新 API)
+  try {
+    const response = await itemService.approveClaim(
+      item.value._id, 
+      claim._id, 
+      {
+        finderAddress: account.value,
+        signature: signature,
+        signatureMessage: messageToSign
+      }
+    );
+    item.value = response.data.data; // 更新 item (状态变为 pending_handover)
+    ElNotification.success('已批准！请等待线下交接');
+  } catch (err) {
+    ElNotification.error({
+      title: '批准失败',
+      message: err.response?.data?.message || err.message,
+    })
+  } finally {
+    approveLoadingId.value = null
+  }
+}
+
+// [!! 新增 !!] 回滚：取消交接
+const handleCancelHandover = async () => {
+  cancelLoadingId.value = true; // 只有一个取消按钮，用布尔值即可
+
+  if (!signer.value || !account.value) {
+    ElNotification.error('请先连接你的钱包！')
+    cancelLoadingId.value = false
+    return
+  }
+
+  // 1. 签名
+  let signature;
+  const messageToSign = `我 (Finder: ${account.value}) 确认取消交接 (Item ID: ${item.value._id})`
+  try {
+    const rawSigner = toRaw(signer.value)
+    if (!rawSigner) throw new Error('Signer 无效')
+    ElNotification.info('请在钱包中签名以确认取消...')
+    signature = await rawSigner.signMessage(messageToSign)
+  } catch (err) {
+    console.error('签名失败:', err)
+    ElNotification.error('您取消了签名，或签名失败')
+    cancelLoadingId.value = false
+    return
+  }
+
+  // 2. 发送到后端 (新 API)
+  try {
+    const response = await itemService.cancelHandover(
+      item.value._id, 
+      {
+        finderAddress: account.value,
+        signature: signature,
+        signatureMessage: messageToSign
+      }
+    );
+    item.value = response.data.data; // 更新 item (状态变回 available)
+    ElNotification.warning('交接已取消，物品已重新开放审核');
+  } catch (err) {
+    ElNotification.error({
+      title: '取消失败',
+      message: err.response?.data?.message || err.message,
+    })
+  } finally {
+    cancelLoadingId.value = false
+  }
+}
+
+// [!! 重命名并修改 !!] 阶段二：链上交割 (原 handleApprove)
+const handleApproveStage2_Finalize = async (claim) => {
+  const losterAddressToReceive = claim.applierAddress
+  const itemToClaim = item.value
+
+  finalizeLoadingId.value = claim._id
+
+  if (!signer.value || !account.value) {
+    ElNotification.error('请先连接你的钱包！')
+    finalizeLoadingId.value = null
     return
   }
   if (account.value.toLowerCase() !== itemToClaim.finderAddress.toLowerCase()) {
     ElNotification.error('你不是该物品的拾物者，无权操作！')
-    // claimLoading.value = false
-    approveLoadingId.value = null
+    finalizeLoadingId.value = null
     return
   }
 
@@ -381,8 +564,7 @@ const handleApprove = async (claim) => {
       validLosterAddress = ethers.getAddress(losterAddressToReceive)
     } catch (validationError) {
       ElNotification.error('申请人地址无效。无法转移。')
-      // claimLoading.value = false
-      approveLoadingId.value = null
+      finalizeLoadingId.value = null
       return
     }
 
@@ -390,38 +572,45 @@ const handleApprove = async (claim) => {
       tokenIdBigInt = BigInt(itemToClaim.tokenId)
     } catch (castError) {
       ElNotification.error(`物品 Token ID (${itemToClaim.tokenId}) 无效。`)
-      // claimLoading.value = false
-      approveLoadingId.value = null
+      finalizeLoadingId.value = null
       return
     }
 
     const rawSigner = toRaw(signer.value)
     if (!rawSigner) {
       ElNotification.error('Signer 无效，请重新连接钱包。')
-      // claimLoading.value = false
-      approveLoadingId.value = null
+      finalizeLoadingId.value = null
       return
     }
 
     const contract = new ethers.Contract(CONTRACT_ADDRESS, ContractABI.abi, rawSigner)
-    ElNotification.info('正在发送交易，请在 MetaMask 中确认...')
+    ElNotification.info('正在发送交易，请在 MetaMask 中确认交割...')
 
     const tx = await contract.claimItem(validLosterAddress, tokenIdBigInt)
     await tx.wait()
 
+    // [!! 核心 !!] 链上成功后，立即调用后端 API (claim-db) 来同步
     try {
-      await itemService.markItemAsClaimed(itemToClaim._id, { losterAddress: validLosterAddress })
+      const response = await itemService.markItemAsClaimed(
+        itemToClaim._id, 
+        { losterAddress: validLosterAddress }
+      )
+      // 使用后端返回的最新数据更新前端
+      item.value = response.data.data 
     } catch (dbError) {
       console.error('链上成功，但数据库更新失败:', dbError)
-      ElNotification.warning('链上交易成功，但后台状态更新失败。')
+      ElNotification.warning('链上交易成功，但后台状态更新失败。请尝试刷新页面。')
+      // 即使 DB 失败，也尝试刷新
+      await fetchItem() 
     }
 
     ElNotification.success({
-      title: '批准成功！',
+      title: '交割成功！',
       message: '物品已成功转移给失主！',
     })
-
-    await fetchItem()
+    
+    // (不再需要手动 fetchItem, markItemAsClaimed 已返回最新数据)
+    // await fetchItem() 
   } catch (err) {
     console.error(err)
     let friendlyMessage = err.reason || err.message || '交易失败'
@@ -435,15 +624,14 @@ const handleApprove = async (claim) => {
       message: friendlyMessage,
     })
   } finally {
-    // claimLoading.value = false
-    approveLoadingId.value = null
+    finalizeLoadingId.value = null
   }
 }
 
-// [!! 核心新增: handleReject !!]
+// [!! (Finder) 拒绝 (保持不变) !!]
 const handleReject = async (claim) => {
-  const claimToReject = claim
-  rejectLoadingId.value = claimToReject._id
+  const claimToReject = claim;
+  rejectLoadingId.value = claimToReject._id;
 
   if (!signer.value || !account.value) {
     ElNotification.error('请先连接你的钱包！')
@@ -452,7 +640,7 @@ const handleReject = async (claim) => {
   }
 
   // 1. 签名
-  let signature
+  let signature;
   const messageToSign = `我 (Finder: ${account.value}) 确认拒绝认领申请 (Claim ID: ${claimToReject._id})`
 
   try {
@@ -469,14 +657,17 @@ const handleReject = async (claim) => {
 
   // 2. 发送到后端
   try {
-    const response = await itemService.rejectClaim(item.value._id, claimToReject._id, {
-      finderAddress: account.value,
-      signature: signature,
-      signatureMessage: messageToSign,
-    })
-    // 使用后端返回的最新 item 数据更新本地
-    item.value = response.data.data
-    ElNotification.success('已拒绝该申请')
+    const response = await itemService.rejectClaim(
+      item.value._id, 
+      claimToReject._id, 
+      {
+        finderAddress: account.value,
+        signature: signature,
+        signatureMessage: messageToSign
+      }
+    );
+    item.value = response.data.data;
+    ElNotification.success('已拒绝该申请');
   } catch (err) {
     ElNotification.error({
       title: '拒绝失败',
@@ -491,7 +682,7 @@ const handleReject = async (claim) => {
 <style scoped>
 /* [!! 样式新增 !!] 图片卡片包裹器 */
 .image-card-wrapper {
-  overflow: hidden; /* 确保卡片的圆角能裁切内部图片 */
+  overflow: hidden; 
 }
 
 /* [!! 样式修改 !!] 移除 action-divider, 改用 action-card-wrapper */
@@ -504,10 +695,6 @@ const handleReject = async (claim) => {
   width: 100%;
   height: 400px;
   object-fit: cover;
-  /* [!! 样式修改 !!] 
-    卡片本身有圆角了，但图片也保留圆角，
-    确保在 hover 放大时依然是圆角
-  */
   border-radius: 8px;
   background-color: var(--el-fill-color-light);
   transition: transform 0.3s ease;
@@ -533,8 +720,8 @@ const handleReject = async (claim) => {
 .item-descriptions {
   margin-top: 20px;
   border: 1px solid var(--el-border-color);
-  border-radius: 8px; /* 成功应用圆角 */
-  overflow: hidden; /* 裁剪内部行 */
+  border-radius: 8px; 
+  overflow: hidden; 
 }
 
 .custom-descriptions-row {
@@ -576,17 +763,11 @@ const handleReject = async (claim) => {
 
 /* 2. 响应式布局 */
 @media (max-width: 992px) {
-  /* [!! 样式新增 !!] 在手机端(堆叠时)，让图片卡片和详情卡片之间有间距 */
   .image-card-wrapper {
     margin-bottom: 10px;
   }
-
   .detail-image {
     height: 300px;
-    /* [!! 样式移除 !!] 
-      margin-bottom: 25px; 
-      现在由 .image-card-wrapper 的 margin-bottom 控制
-    */
   }
   .item-title {
     font-size: 1.5em;
@@ -594,11 +775,6 @@ const handleReject = async (claim) => {
 }
 
 /* 3. 'action-area' 相关样式 */
-/* [!! 样式移除 !!] 
-.action-divider {
-  margin: 30px 0 25px 0;
-} 
-*/
 .action-area-title {
   font-size: 1.1em;
   font-weight: 600;
@@ -613,12 +789,17 @@ const handleReject = async (claim) => {
   font-size: 12px;
 }
 
+/* [!! 样式新增 !!] 解决按钮组换行问题 */
+.action-button-group {
+  white-space: nowrap;
+}
+
 /* 4. 预览器相关样式 (保持不变) */
 .image-container {
   position: relative;
   cursor: pointer;
   overflow: hidden;
-  border-radius: 8px; /* 保留圆角 */
+  border-radius: 8px;
 }
 .image-hover-mask {
   position: absolute;
@@ -644,7 +825,6 @@ const handleReject = async (claim) => {
   transform: scale(1.05);
 }
 
-/* (预览弹窗样式... 保持不变) */
 .image-preview-backdrop {
   position: fixed;
   inset: 0;
@@ -676,7 +856,6 @@ const handleReject = async (claim) => {
   border-radius: 10px;
 }
 
-/* (预览弹窗动画... 保持不变) */
 .backdrop-fade-enter-active,
 .backdrop-fade-leave-active {
   transition: opacity 0.4s ease;
@@ -695,5 +874,8 @@ const handleReject = async (claim) => {
 .preview-card-leave-to {
   opacity: 0;
   transform: scale(0.85);
+}
+.el-alert {
+  margin-top: 0px;
 }
 </style>

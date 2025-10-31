@@ -7,7 +7,8 @@
         <el-menu class="header-menu" mode="horizontal" :router="true" :default-active="$route.path">
           <el-menu-item index="/">主页</el-menu-item>
           <el-menu-item index="/upload">发布物品</el-menu-item>
-          <el-menu-item index="/my-items">我的物品</el-menu-item>
+          <el-menu-item index="/my-items">我的发布</el-menu-item>
+          <el-menu-item index="/my-claims">我的申请</el-menu-item>
         </el-menu>
 
         <div class="wallet-area">
