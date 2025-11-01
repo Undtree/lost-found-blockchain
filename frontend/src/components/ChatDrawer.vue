@@ -9,6 +9,7 @@
     :style="{ maxWidth: '500px' }"
     :with-header="true"
     title="安全聊天"
+    custom-class="chat-drawer-fix"
   >
     <div class="chat-wrapper" v-loading="loading">
       <div class="chat-messages" ref="messageListRef">
@@ -31,7 +32,7 @@
           v-model="newMessageContent"
           placeholder="输入消息..."
           type="textarea"
-          :autosize="{ minRows: 2, maxRows: 4 }"
+          :autosize="{ minRows: 1, maxRows: 4 }"
           resize="none"
           @keydown.enter.prevent="handleSendMessage"
         />
@@ -49,6 +50,7 @@
 </template>
 
 <script setup>
+// ... (script 脚本部分完全保持不变) ...
 import { ref, watch, nextTick, toRaw } from 'vue'
 import { ElNotification } from 'element-plus'
 import itemService from '@/api/itemService'
@@ -64,7 +66,6 @@ const props = defineProps({
     type: String,
     required: true,
   },
-  // 当前登录用户的地址
   currentUserAddress: {
     type: String,
     required: true,
@@ -87,12 +88,9 @@ const {
 const loading = ref(false)
 const messages = ref([])
 const newMessageContent = ref('')
-const targetAddress = ref(null) // 聊天的对方地址
-const messageListRef = ref(null) // 用于滚动
+const targetAddress = ref(null)
+const messageListRef = ref(null)
 
-/**
- * 滚动到消息列表底部
- */
 const scrollToBottom = () => {
   nextTick(() => {
     const el = messageListRef.value
@@ -102,9 +100,6 @@ const scrollToBottom = () => {
   })
 }
 
-/**
- * 格式化时间
- */
 const formatTime = (isoString) => {
   if (!isoString) return ''
   return new Date(isoString).toLocaleTimeString('zh-CN', {
@@ -113,9 +108,6 @@ const formatTime = (isoString) => {
   })
 }
 
-/**
- * 抽屉打开时的核心逻辑
- */
 const handleDrawerOpen = async () => {
   loading.value = true
   messages.value = []
@@ -127,14 +119,12 @@ const handleDrawerOpen = async () => {
     return
   }
 
-  // 1. 生成一次性签名，用于所有 API 和 Socket 认证
   const messageToSign = `为钱包 ${props.currentUserAddress} 认证聊天功能`
   let signature
   try {
     const rawSigner = toRaw(signer.value)
     signature = await rawSigner.signMessage(messageToSign)
   } catch (err) {
-    // [!! 已修复 !!]
     console.error('聊天签名失败:', err)
 
     if (err.code === 'ACTION_REJECTED') {
@@ -154,22 +144,16 @@ const handleDrawerOpen = async () => {
   }
 
   try {
-    // 2. 获取聊天的目标地址
     const targetRes = await itemService.getChatTarget(props.itemId, authData)
     targetAddress.value = targetRes.data.data.targetAddress
 
-    // 3. 获取历史消息
     const messagesRes = await itemService.getChatMessages(props.itemId, authData)
     messages.value = messagesRes.data.data
     scrollToBottom()
 
-    // 4. [!! 核心 !!] 初始化 Socket.IO 连接 (传入签名)
     initializeSocket(signature, messageToSign)
 
-    // 5. 等待连接成功后，加入房间
-    // (我们使用 watch 监听 isConnected)
   } catch (err) {
-    // [!! 已修复 !!]
     console.error('加载聊天数据失败:', err)
     ElNotification.error(
       `加载聊天失败: ${err.response?.data?.message || err.message}`,
@@ -179,9 +163,6 @@ const handleDrawerOpen = async () => {
   }
 }
 
-/**
- * 抽屉关闭时，断开 Socket 连接
- */
 const handleDrawerClose = () => {
   disconnectSocket()
   messages.value = []
@@ -189,9 +170,6 @@ const handleDrawerClose = () => {
   targetAddress.value = null
 }
 
-/**
- * 发送消息
- */
 const handleSendMessage = () => {
   if (!newMessageContent.value.trim() || !targetAddress.value) return
   if (!isConnected.value) {
@@ -205,17 +183,12 @@ const handleSendMessage = () => {
     content: newMessageContent.value.trim(),
   })
 
-  // (注意：我们不再需要手动将消息推入数组)
-  // (Socket.IO 会将我们发送的消息广播回来，由 newMessage 监听器统一处理)
   newMessageContent.value = ''
 }
 
-// 监听 Socket 是否连接成功
 watch(isConnected, (newVal) => {
   if (newVal === true) {
-    // 1. 确保我们是在这个物品的抽屉里
     if (props.visible && props.itemId) {
-      // 2. 确保我们没有重复加入
       if (joinedRoomId.value !== props.itemId) {
         joinRoom(props.itemId)
       }
@@ -223,7 +196,6 @@ watch(isConnected, (newVal) => {
   }
 })
 
-// 监听 Socket 传来的新消息
 watch(newMessage, (newMsg) => {
   if (newMsg && newMsg.conversationId === props.itemId) {
     messages.value.push(newMsg)
@@ -232,7 +204,18 @@ watch(newMessage, (newMsg) => {
 })
 </script>
 
+
 <style scoped>
+/* [!! 核心修复 !!]
+  使用 :global() 将这个规则标记为全局
+  它现在在 <style scoped> 内部，HMR 应该能正确处理它
+*/
+:global(.chat-drawer-fix .el-drawer__header) {
+  margin-bottom: 0 !important;
+}
+
+/* ... (所有其他样式保持不变) ... */
+
 .chat-wrapper {
   display: flex;
   flex-direction: column;
@@ -245,13 +228,13 @@ watch(newMessage, (newMsg) => {
   padding: 10px;
   background-color: #f5f7fa;
   border-radius: 8px;
+  border: 1px solid var(--el-border-color);
 }
 
 .chat-input-area {
   display: flex;
   align-items: center;
-  padding-top: 10px;
-  border-top: 1px solid var(--el-border-color);
+  padding-top: 15px;
 }
 
 .message-row {

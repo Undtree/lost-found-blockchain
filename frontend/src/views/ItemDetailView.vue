@@ -117,12 +117,20 @@
                 <el-button
                   v-if="myCurrentClaimStatus === 'approved'"
                   type="primary"
-                  size="large"
                   @click="isChatDrawerVisible = true"
                   :icon="ChatDotRound"
                 >
                   联系 Finder
                 </el-button>
+
+                <el-text
+                  v-if="myCurrentClaimStatus === 'approved'"
+                  type="info"
+                  size="small"
+                  style="margin-top: 10px; display: block"
+                >
+                  点击后将通过钱包签名认证，进入安全聊天。
+                </el-text>
               </div>
 
               <div v-if="!isFinder && item.status === 'claimed'">
@@ -150,12 +158,15 @@
                 <div v-if="isPendingHandover" class="finder-chat-button">
                   <el-button
                     type="primary"
-                    plain
                     @click="isChatDrawerVisible = true"
                     :icon="ChatDotRound"
                   >
                     联系被批准的 Loster
                   </el-button>
+
+                  <el-text type="info" size="small" style="margin-top: 10px; display: block">
+                    点击后将通过钱包签名认证，进入安全聊天。
+                  </el-text>
                 </div>
 
                 <el-empty
@@ -297,19 +308,17 @@ import { ref, onMounted, computed, toRaw, watch, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { ethers } from 'ethers'
 import { ElNotification } from 'element-plus'
-// [!! 1. 引入图标和新组件 !!]
 import { ZoomIn, ChatDotRound } from '@element-plus/icons-vue'
 import { useEthers } from '@/composables/useEthers.js'
 import itemService from '@/api/itemService.js'
 import ContractABI from '@/contracts/LostItemNFT.json'
-import ChatDrawer from '@/components/ChatDrawer.vue' // [!! 2. 引入新组件 !!]
+import ChatDrawer from '@/components/ChatDrawer.vue'
 
 // --- 状态定义 ---
 const route = useRoute()
 const item = ref(null)
 const loading = ref(true)
 
-// [!! 核心修改: 细分 Loading !!]
 const approveLoadingId = ref(null)
 const rejectLoadingId = ref(null)
 const finalizeLoadingId = ref(null)
@@ -321,8 +330,30 @@ const secretMessage = ref('')
 const { account, signer } = useEthers()
 const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3' // 确保地址正确
 
-// [!! 3. 新增聊天抽屉状态 !!]
 const isChatDrawerVisible = ref(false)
+
+// --- [!! 核心修复 !!] ---
+// 监听账户变化，如果抽屉是打开的，则自动关闭它
+watch(account, (newAccount, oldAccount) => {
+  if (!isChatDrawerVisible.value) {
+    // 如果抽屉没打开，什么都不做
+    return
+  }
+
+  // 检查：
+  // 1. oldAccount 必须存在 (忽略初始连接时 null -> 0x...)
+  // 2. newAccount 不存在 (用户断开连接)
+  // 3. 或者 newAccount 与 oldAccount 不一样 (用户切换了账户)
+  if (oldAccount && (!newAccount || newAccount.toLowerCase() !== oldAccount.toLowerCase())) {
+    ElNotification.info('钱包账户已更改或断开，聊天已自动关闭。')
+    isChatDrawerVisible.value = false
+    // isChatDrawerVisible 变化会触发 ChatDrawer 的 @closed 事件
+    // @closed 事件会调用 handleDrawerClose
+    // handleDrawerClose 会调用 disconnectSocket()，完成清理
+  }
+})
+// --- [!! 修复结束 !!] ---
+
 
 // --- 预览器状态 (保持不变) ---
 const isPreviewVisible = ref(false)
@@ -334,7 +365,7 @@ watch(isPreviewVisible, (newVal) => {
 })
 onUnmounted(() => { document.body.style.overflow = '' })
 
-// --- 计算属性 (核心修改) ---
+// --- 计算属性 (保持不变) ---
 const isFinder = computed(() => {
   return (
     account.value &&
@@ -347,7 +378,6 @@ const isAvailable = computed(() => {
   return item.value && item.value.status === 'available'
 })
 
-// [!! 新增 !!]
 const isPendingHandover = computed(() => {
   return item.value && item.value.status === 'pending_handover'
 })
@@ -366,7 +396,6 @@ const myCurrentClaimStatus = computed(() => {
   return myClaim ? myClaim.status : null; // 'pending', 'rejected', 'approved', or null
 })
 
-// [!! 新增 !!]
 const itemStatusText = computed(() => {
   if (!item.value) return ''
   switch (item.value.status) {
@@ -377,7 +406,6 @@ const itemStatusText = computed(() => {
   }
 })
 
-// [!! 新增 !!]
 const itemStatusType = computed(() => {
   if (!item.value) return 'info'
   switch (item.value.status) {
@@ -388,7 +416,6 @@ const itemStatusType = computed(() => {
   }
 })
 
-// [!! 新增 !!]
 const losterToShow = computed(() => {
   if (!item.value) return ''
   if (item.value.status === 'claimed') {
@@ -571,7 +598,7 @@ const handleCancelHandover = async () => {
   }
 }
 
-// [!! 重命名并修改 !!] 阶段二：链上交割 (原 handleApprove)
+// [!! 修正: 包含之前对 catch 块的修复 !!] 阶段二：链上交割
 const handleApproveStage2_Finalize = async (claim) => {
   const losterAddressToReceive = claim.applierAddress
   const itemToClaim = item.value
@@ -596,6 +623,7 @@ const handleApproveStage2_Finalize = async (claim) => {
     try {
       validLosterAddress = ethers.getAddress(losterAddressToReceive)
     } catch (validationError) {
+      // [!! 已修复 !!]
       console.error('Loster 地址无效:', validationError)
       ElNotification.error('申请人地址无效。无法转移。')
       finalizeLoadingId.value = null
@@ -605,6 +633,7 @@ const handleApproveStage2_Finalize = async (claim) => {
     try {
       tokenIdBigInt = BigInt(itemToClaim.tokenId)
     } catch (castError) {
+      // [!! 已修复 !!]
       console.error('Token ID 转换 BigInt 失败:', castError)
       ElNotification.error(`物品 Token ID (${itemToClaim.tokenId}) 无效。`)
       finalizeLoadingId.value = null
