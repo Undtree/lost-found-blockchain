@@ -15,7 +15,8 @@
     "ethers": "^6.8.0",
     "express": "^5.1.0",
     "mongoose": "^8.19.1",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "socket.io": "^4.8.1"
   },
   "type": "commonjs"
 }

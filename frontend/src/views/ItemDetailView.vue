@@ -102,8 +102,9 @@
                   v-if="myCurrentClaimStatus === 'approved'"
                   title="你的申请已批准！"
                   type="success"
-                  description="你的申请已通过！请等待拾物者与你联系（或按约定）进行线下交接。"
+                  description="请与拾物者联系约定线下交接。"
                   :closable="false"
+                  style="margin-bottom: 15px"
                 />
                 <el-alert
                   v-if="myCurrentClaimStatus === 'rejected' || myCurrentClaimStatus === 'pending' || myCurrentClaimStatus === null"
@@ -112,6 +113,16 @@
                   description="拾物者已批准了另一份申请，正在等待线下交接。"
                   :closable="false"
                 />
+
+                <el-button
+                  v-if="myCurrentClaimStatus === 'approved'"
+                  type="primary"
+                  size="large"
+                  @click="isChatDrawerVisible = true"
+                  :icon="ChatDotRound"
+                >
+                  联系 Finder
+                </el-button>
               </div>
 
               <div v-if="!isFinder && item.status === 'claimed'">
@@ -135,6 +146,17 @@
                 <h3 class="action-area-title" v-if="isAvailable">审核认领申请</h3>
                 <h3 class="action-area-title" v-if="isPendingHandover">等待交接</h3>
                 <h3 class="action-area-title" v-if="item.status === 'claimed'">交割完成</h3>
+
+                <div v-if="isPendingHandover" class="finder-chat-button">
+                  <el-button
+                    type="primary"
+                    plain
+                    @click="isChatDrawerVisible = true"
+                    :icon="ChatDotRound"
+                  >
+                    联系被批准的 Loster
+                  </el-button>
+                </div>
 
                 <el-empty
                   v-if="!claims || claims.length === 0"
@@ -261,21 +283,29 @@
       </div>
     </div>
   </Transition>
+
+  <ChatDrawer
+    v-if="item && account"
+    v-model:visible="isChatDrawerVisible"
+    :item-id="item._id"
+    :current-user-address="account"
+  />
 </template>
 
 <script setup>
 import { ref, onMounted, computed, toRaw, watch, onUnmounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { ethers } from 'ethers'
 import { ElNotification } from 'element-plus'
-import { ZoomIn } from '@element-plus/icons-vue'
+// [!! 1. 引入图标和新组件 !!]
+import { ZoomIn, ChatDotRound } from '@element-plus/icons-vue'
 import { useEthers } from '@/composables/useEthers.js'
 import itemService from '@/api/itemService.js'
 import ContractABI from '@/contracts/LostItemNFT.json'
+import ChatDrawer from '@/components/ChatDrawer.vue' // [!! 2. 引入新组件 !!]
 
 // --- 状态定义 ---
 const route = useRoute()
-const router = useRouter()
 const item = ref(null)
 const loading = ref(true)
 
@@ -291,12 +321,15 @@ const secretMessage = ref('')
 const { account, signer } = useEthers()
 const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3' // 确保地址正确
 
+// [!! 3. 新增聊天抽屉状态 !!]
+const isChatDrawerVisible = ref(false)
+
 // --- 预览器状态 (保持不变) ---
 const isPreviewVisible = ref(false)
 const openPreview = () => { isPreviewVisible.value = true }
 const closePreview = () => { isPreviewVisible.value = false }
 watch(isPreviewVisible, (newVal) => {
-  if (newVal) { document.body.style.overflow = 'hidden' } 
+  if (newVal) { document.body.style.overflow = 'hidden' }
   else { document.body.style.overflow = '' }
 })
 onUnmounted(() => { document.body.style.overflow = '' })
@@ -325,7 +358,7 @@ const claims = computed(() => {
 
 const myCurrentClaimStatus = computed(() => {
   if (!account.value || !claims.value) {
-    return null; 
+    return null;
   }
   const myClaim = claims.value.find(
     (c) => c.applierAddress.toLowerCase() === account.value.toLowerCase()
@@ -452,7 +485,7 @@ const handleApproveStage1 = async (claim) => {
     approveLoadingId.value = null
     return
   }
-  
+
   // 1. 签名
   let signature;
   const messageToSign = `我 (Finder: ${account.value}) 确认批准认领申请 (Claim ID: ${claim._id})`
@@ -471,8 +504,8 @@ const handleApproveStage1 = async (claim) => {
   // 2. 发送到后端 (新 API)
   try {
     const response = await itemService.approveClaim(
-      item.value._id, 
-      claim._id, 
+      item.value._id,
+      claim._id,
       {
         finderAddress: account.value,
         signature: signature,
@@ -519,7 +552,7 @@ const handleCancelHandover = async () => {
   // 2. 发送到后端 (新 API)
   try {
     const response = await itemService.cancelHandover(
-      item.value._id, 
+      item.value._id,
       {
         finderAddress: account.value,
         signature: signature,
@@ -563,6 +596,7 @@ const handleApproveStage2_Finalize = async (claim) => {
     try {
       validLosterAddress = ethers.getAddress(losterAddressToReceive)
     } catch (validationError) {
+      console.error('Loster 地址无效:', validationError)
       ElNotification.error('申请人地址无效。无法转移。')
       finalizeLoadingId.value = null
       return
@@ -571,6 +605,7 @@ const handleApproveStage2_Finalize = async (claim) => {
     try {
       tokenIdBigInt = BigInt(itemToClaim.tokenId)
     } catch (castError) {
+      console.error('Token ID 转换 BigInt 失败:', castError)
       ElNotification.error(`物品 Token ID (${itemToClaim.tokenId}) 无效。`)
       finalizeLoadingId.value = null
       return
@@ -592,25 +627,23 @@ const handleApproveStage2_Finalize = async (claim) => {
     // [!! 核心 !!] 链上成功后，立即调用后端 API (claim-db) 来同步
     try {
       const response = await itemService.markItemAsClaimed(
-        itemToClaim._id, 
+        itemToClaim._id,
         { losterAddress: validLosterAddress }
       )
       // 使用后端返回的最新数据更新前端
-      item.value = response.data.data 
+      item.value = response.data.data
     } catch (dbError) {
       console.error('链上成功，但数据库更新失败:', dbError)
       ElNotification.warning('链上交易成功，但后台状态更新失败。请尝试刷新页面。')
       // 即使 DB 失败，也尝试刷新
-      await fetchItem() 
+      await fetchItem()
     }
 
     ElNotification.success({
       title: '交割成功！',
       message: '物品已成功转移给失主！',
     })
-    
-    // (不再需要手动 fetchItem, markItemAsClaimed 已返回最新数据)
-    // await fetchItem() 
+
   } catch (err) {
     console.error(err)
     let friendlyMessage = err.reason || err.message || '交易失败'
@@ -658,8 +691,8 @@ const handleReject = async (claim) => {
   // 2. 发送到后端
   try {
     const response = await itemService.rejectClaim(
-      item.value._id, 
-      claimToReject._id, 
+      item.value._id,
+      claimToReject._id,
       {
         finderAddress: account.value,
         signature: signature,
@@ -680,9 +713,16 @@ const handleReject = async (claim) => {
 </script>
 
 <style scoped>
+/* [!! 样式新增 !!] Finder 聊天按钮的容器 */
+.finder-chat-button {
+  margin-bottom: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
 /* [!! 样式新增 !!] 图片卡片包裹器 */
 .image-card-wrapper {
-  overflow: hidden; 
+  overflow: hidden;
 }
 
 /* [!! 样式修改 !!] 移除 action-divider, 改用 action-card-wrapper */
@@ -720,8 +760,8 @@ const handleReject = async (claim) => {
 .item-descriptions {
   margin-top: 20px;
   border: 1px solid var(--el-border-color);
-  border-radius: 8px; 
-  overflow: hidden; 
+  border-radius: 8px;
+  overflow: hidden;
 }
 
 .custom-descriptions-row {

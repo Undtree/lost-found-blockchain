@@ -612,5 +612,69 @@ router.post('/items/:id/cancel-handover', async (req, res) => {
   }
 });
 
+// [!! 核心新增: POST /items/:id/chat-target 路由 !!]
+// 这个路由用于告诉前端“聊天的对方是谁”
+router.post('/items/:id/chat-target', async (req, res) => {
+  const { id: itemId } = req.params;
+  const { userAddress, signature, signatureMessage } = req.body;
+
+  // 1. 验证签名 (确保是你本人)
+  if (!userAddress || !signature || !signatureMessage) {
+    return res.status(403).json({ message: '缺少身份验证签名' });
+  }
+  let recoveredAddress;
+  try {
+    recoveredAddress = ethers.verifyMessage(signatureMessage, signature);
+  } catch (e) {
+    return res.status(400).json({ message: '签名格式无效' });
+  }
+  if (recoveredAddress.toLowerCase() !== userAddress.toLowerCase()) {
+    return res.status(403).json({ message: '签名验证失败' });
+  }
+
+  // 2. 查找物品
+  try {
+    const item = await Item.findById(itemId);
+    if (!item) {
+      return res.status(404).json({ message: '未找到物品' });
+    }
+
+    const user = userAddress.toLowerCase();
+    const finder = item.finderAddress.toLowerCase();
+    
+    let targetAddress = null;
+
+    if (user === finder) {
+      // 如果你是 Finder，你的聊天对象是那个“被批准”的 Loster
+      if (item.status === 'pending_handover') {
+        const approvedClaim = item.claims.find(c => c.status === 'approved');
+        if (approvedClaim) {
+          targetAddress = approvedClaim.applierAddress;
+        } else {
+          return res.status(404).json({ message: '错误：物品在 pending_handover 状态，但未找到批准的申请人' });
+        }
+      } else {
+        return res.status(400).json({ message: '物品不处于等待交接状态，无法发起聊天' });
+      }
+    } else {
+      // 如果你是 Loster，你的聊天对象是 Finder
+      const myClaim = item.claims.find(c => c.applierAddress.toLowerCase() === user);
+      if (myClaim && myClaim.status === 'approved') {
+        targetAddress = item.finderAddress;
+      } else {
+        return res.status(403).json({ message: '你不是此物品批准的认领者，无法发起聊天' });
+      }
+    }
+    
+    res.status(200).json({ 
+      message: '成功获取聊天目标', 
+      data: { targetAddress: targetAddress }
+    });
+
+  } catch (err) {
+    res.status(500).json({ message: '服务器内部错误', error: err });
+  }
+});
+
 // 导出路由实例
 module.exports = router;

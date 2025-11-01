@@ -98,4 +98,22 @@ export default {
   cancelHandover(itemId, data) {
     return apiClient.post(`/items/${itemId}/cancel-handover`, data)
   },
+
+  /**
+   * 获取聊天的目标地址 (Finder 或 Loster)
+   * @param {string} id - 物品的 _id
+   * @param {object} authData - 包含 { userAddress, signature, signatureMessage }
+   */
+  getChatTarget(id, authData) {
+    return apiClient.post(`/items/${id}/chat-target`, authData)
+  },
+
+  /**
+   * 获取特定物品的历史消息
+   * @param {string} id - 物品的 _id
+   * @param {object} authData - 包含 { userAddress, signature, signatureMessage }
+   */
+  getChatMessages(id, authData) {
+    return apiClient.post(`/items/${id}/messages`, authData)
+  },
 }
