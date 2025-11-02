@@ -35,6 +35,21 @@
                     <div class="custom-descriptions-label">拾获地点</div>
                     <div class="custom-descriptions-value">{{ item.location }}</div>
                   </div>
+                  <div class="custom-descriptions-row" v-if="item.tags && item.tags.length > 0">
+                    <div class="custom-descriptions-label">AI 标签</div>
+                    <div class="custom-descriptions-value tags-container">
+                      <el-tag
+                        v-for="tag in item.tags"
+                        :key="tag"
+                        type="info"
+                        effect="plain"
+                        disable-transitions
+                        size="small"
+                      >
+                        {{ tag }}
+                      </el-tag>
+                    </div>
+                  </div>
                   <div class="custom-descriptions-row">
                     <div class="custom-descriptions-label">Token ID</div>
                     <div class="custom-descriptions-value">{{ item.tokenId }}</div>
@@ -857,10 +872,14 @@ const handleReject = async (claim) => {
 .claim-list-card .address-text {
   font-size: 12px;
 }
-
-/* [!! 样式新增 !!] 解决按钮组换行问题 */
 .action-button-group {
   white-space: nowrap;
+}
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px; /* 替代 margin */
+  align-items: center; /* 垂直居中对齐 */
 }
 
 /* 4. 预览器相关样式 (保持不变) */

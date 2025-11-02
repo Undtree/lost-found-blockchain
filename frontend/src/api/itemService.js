@@ -37,6 +37,18 @@ export default {
   },
 
   /**
+   * 上传图片进行 AI 分析
+   * @param {FormData} formData - 仅包含 'image' 字段
+   */
+  analyzeImage(formData) {
+    return apiClient.post('/items/analyze-image', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+  },
+
+  /**
    * 在链上认领成功后，通知后端更新数据库状态
    * @param {string} id - 数据库的 _id
    * @param {object} data - 包含 { losterAddress: '0x...' }

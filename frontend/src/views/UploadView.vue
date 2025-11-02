@@ -10,34 +10,6 @@
           label-position="top"
         >
           <el-row :gutter="10">
-            <el-col :xs="24" :sm="24" :md="12">
-              <el-card shadow="always">
-                <template #header>
-                  <div class="card-header">
-                    <h3>填写物品信息</h3>
-                  </div>
-                </template>
-
-                <el-form-item label="物品名称" prop="name">
-                  <el-input v-model="form.name" placeholder="例如：一把黑色的天堂伞"></el-input>
-                </el-form-item>
-                <el-form-item label="物品描述" prop="description">
-                  <el-input
-                    v-model="form.description"
-                    type="textarea"
-                    :rows="3"
-                    placeholder="例如：在东教一楼楼梯口捡到的，大概8成新"
-                  ></el-input>
-                </el-form-item>
-                <el-form-item label="地点" prop="location">
-                  <el-input
-                    v-model="form.location"
-                    placeholder="例如：东校区-教学楼-东一"
-                  ></el-input>
-                </el-form-item>
-              </el-card>
-            </el-col>
-
             <el-col :xs="24" :sm="24" :md="12" class="image-upload-card-wrapper">
               <el-card shadow="always">
                 <template #header>
@@ -59,7 +31,11 @@
                     class="custom-uploader-wrapper"
                   >
                     <template #default>
-                      <div class="custom-uploader-content">
+                      <div
+                        class="custom-uploader-content"
+                        v-loading="isAnalyzing"
+                        element-loading-text="Agent 分析中..."
+                      >
                         <Transition name="preview-fade-scale">
                           <div v-if="imageUrlPreview" class="image-preview-container">
                             <img :src="imageUrlPreview" class="preview-image" alt="Image preview" />
@@ -85,6 +61,54 @@
                       </div>
                     </template>
                   </el-upload>
+                </el-form-item>
+              </el-card>
+            </el-col>
+
+            <el-col :xs="24" :sm="24" :md="12">
+              <el-card shadow="always">
+                <template #header>
+                  <div class="card-header">
+                    <h3>填写物品信息</h3>
+                  </div>
+                </template>
+
+                <el-form-item label="物品名称" prop="name">
+                  <el-input v-model="form.name" placeholder="例如：一把黑色的天堂伞"></el-input>
+                </el-form-item>
+                <el-form-item label="物品描述" prop="description">
+                  <el-input
+                    v-model="form.description"
+                    type="textarea"
+                    :rows="3"
+                    placeholder="例如：物品的成色、发现时的状态、有无破损等"
+                  ></el-input>
+                </el-form-item>
+
+                <el-form-item label="Agent 建议标签" prop="tags">
+                  <el-select
+                    v-model="form.tags"
+                    multiple
+                    filterable
+                    allow-create
+                    default-first-option
+                    placeholder="Agent 将自动填充标签，你也可以手动添加"
+                    style="width: 100%"
+                  >
+                    <el-option
+                      v-for="item in form.tags"
+                      :key="item"
+                      :label="item"
+                      :value="item"
+                    />
+                  </el-select>
+                </el-form-item>
+
+                <el-form-item label="地点" prop="location">
+                  <el-input
+                    v-model="form.location"
+                    placeholder="例如：东校区-教学楼-东一"
+                  ></el-input>
                 </el-form-item>
               </el-card>
             </el-col>
@@ -115,6 +139,8 @@ const router = useRouter()
 const formRef = ref(null)
 const uploadRef = ref(null)
 const loading = ref(false)
+const isAnalyzing = ref(false)
+const agentFilledName = ref(false)
 const imageUrlPreview = ref(null) // 用于本地预览的 URL
 
 const form = reactive({
@@ -122,6 +148,7 @@ const form = reactive({
   description: '',
   location: '',
   image: null,
+  tags: [], // [!! 3. 新增 Tags 字段 !!]
 })
 
 // --- 表单校验 ---
@@ -140,19 +167,76 @@ const rules = reactive({
 })
 
 // --- el-upload 钩子函数 ---
-const handleFileChange = (uploadFile) => {
-  // 如果已有预览，先释放旧的 URL
+const handleFileChange = async (uploadFile) => {
+  // 1. (不变) 设置本地预览
   if (imageUrlPreview.value) {
     URL.revokeObjectURL(imageUrlPreview.value)
   }
-
   form.image = uploadFile.raw
-  // 创建新的本地预览 URL
   imageUrlPreview.value = URL.createObjectURL(uploadFile.raw)
-
-  // 校验通过，不会抛出错误
   if (formRef.value) {
     formRef.value.validateField('image')
+  }
+
+  isAnalyzing.value = true
+  agentFilledName.value = false
+
+  // [!! 2. 新增: 身份验证 !!]
+  if (!account.value || !signer.value) {
+    ElNotification.error('请先连接钱包才能使用 Agent 分析');
+    isAnalyzing.value = false;
+    triggerRemove(); // (重要) 移除上传失败的图片
+    return;
+  }
+
+  // [!! 3. 新增: 钱包签名 !!]
+  let signature;
+  // (使用一个唯一的签名消息，防止重放攻击)
+  const messageToSign = `我 (地址: ${account.value}) 请求 Agent 分析一张图片 (时间: ${Date.now()})`;
+  try {
+    const rawSigner = toRaw(signer.value);
+    ElNotification.info('请在钱包中签名以授权 Agent 分析...');
+    signature = await rawSigner.signMessage(messageToSign);
+  } catch (err) {
+    console.error('Signature has been canceled', err);
+    ElNotification.error('您取消了签名，无法使用 Agent');
+    isAnalyzing.value = false;
+    triggerRemove();
+    return;
+  }
+
+  // [!! 4. 新增: 准备包含 Auth 的 FormData !!]
+  const agentFormData = new FormData()
+  agentFormData.append('image', uploadFile.raw)
+  agentFormData.append('userAddress', account.value)
+  agentFormData.append('signature', signature)
+  agentFormData.append('signatureMessage', messageToSign)
+
+  // 5. (修改) 调用 API
+  try {
+    // (现在发送的是包含 auth 的 agentFormData)
+    const res = await itemService.analyzeImage(agentFormData)
+    const { name, tags } = res.data.data
+
+    // ... (填充 form.name 和 form.tags 的逻辑不变) ...
+    form.name = name
+    form.tags = tags
+    agentFilledName.value = true
+    if (formRef.value) {
+      formRef.value.validateField('name')
+    }
+    ElNotification.success('Agent 分析完成')
+
+  } catch (err) {
+    // ... (错误处理不变) ...
+    console.error('Agent analysis failed', err)
+    ElNotification.error('Agent 分析失败: ' + (err.response?.data?.message || err.message))
+    if (agentFilledName.value) {
+      form.name = ''
+    }
+    form.tags = []
+  } finally {
+    isAnalyzing.value = false
   }
 }
 
@@ -161,18 +245,24 @@ const handleFileChange = (uploadFile) => {
  * 这个函数现在主要由 triggerRemove 手动调用。
  */
 const handleRemove = () => {
-  // 释放 URL 内存
+  // (不变) 释放 URL 内存
   if (imageUrlPreview.value) {
     URL.revokeObjectURL(imageUrlPreview.value)
   }
   form.image = null
-  imageUrlPreview.value = null // 清空预览 URL
+  imageUrlPreview.value = null
 
-  // 触发校验失败，并捕获预期的错误
+  // [!! 核心修改: 清理 Agent 字段 !!]
+  // 如果名称是 Agent 填充的，就清空它
+  if (agentFilledName.value) {
+    form.name = '' // [!! 修改 !!]
+  }
+  form.tags = []
+  agentFilledName.value = false
+
+  // (不变) 触发校验
   if (formRef.value) {
-    formRef.value.validateField('image').catch(() => {
-      // 这是一个预期的错误，UI会正常显示，我们不需要在控制台做什么。
-    })
+    formRef.value.validateField('image').catch(() => { /* ... */ })
   }
 }
 
@@ -246,6 +336,10 @@ const handleSubmit = async () => {
       formData.append('finderAddress', account.value)
       formData.append('signature', signature)
       formData.append('signatureMessage', messageToSign)
+
+      // [!! 核心修改: 附加 Tags !!]
+      // 将数组转为 JSON 字符串
+      formData.append('tags', JSON.stringify(form.tags))
 
       // 5. API 请求
       try {

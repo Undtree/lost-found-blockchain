@@ -60,6 +60,10 @@ const itemSchema = new Schema({
     unique: true,
     sparse: true
   },
+  tags: {
+    type: [String], // 存储标签的数组
+    default: []
+  },
 
   claims: [claimSchema]
 }, { timestamps: true }); // timestamps 会自动添加 createdAt 和 updatedAt 字段

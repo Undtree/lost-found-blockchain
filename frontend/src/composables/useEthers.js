@@ -1,5 +1,5 @@
 // src/composables/useEthers.js
-import { ref, readonly } from 'vue'
+import { ref } from 'vue'
 import { ethers } from 'ethers'
 import { ElNotification } from 'element-plus'
 
@@ -114,7 +114,16 @@ export function useEthers() {
       // [!! 修复 D !!] 将“原始” provider 传给监听器
       setupEventListeners(browserProvider)
     } catch (e) {
-      // ... (catch 块保持不变) ...
+      console.error('连接钱包失败:', e);
+      let message = '连接钱包时发生未知错误。';
+
+      // MetaMask 用户拒绝的标准错误代码
+      if (e.code === 4001) {
+        message = '您拒绝了钱包连接请求。';
+      }
+
+      ElNotification.error(message);
+      internalDisconnectWallet();
     }
   }
 
