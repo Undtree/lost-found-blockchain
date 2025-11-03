@@ -5,6 +5,7 @@ const { ethers } = require('ethers');
 const multer = require('multer'); // 引入 multer
 const Item = require('../models/item'); // 引入 Item 模型
 const { analyzeImage } = require('../utils/aiApi'); // [!! 核心修改: 引入新的 AI 工具 !!]
+const rateLimit = require('express-rate-limit');
 
 // 创建一个路由实例
 const router = express.Router();
@@ -92,9 +93,19 @@ const upload = multer({
 });
 // ------
 
+const aiAnalysisLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 分钟的窗口期
+  max: 10, // 每个 IP 在 15 分钟内最多只能请求 10 次
+  message: {
+    message: '你提交的 Agent 分析请求过多，请 15 分钟后再试。'
+  },
+  standardHeaders: true, // 返回 RateLimit-* 相关的 HTTP 头
+  legacyHeaders: false, // 禁用 X-RateLimit-* 旧版头
+});
+
 // [!! 核心修改: POST /items/analyze-image 路由 !!]
 // (添加了签名验证守卫)
-router.post('/items/analyze-image', upload.single('image'), async (req, res) => {
+router.post('/items/analyze-image', aiAnalysisLimiter, upload.single('image'), async (req, res) => {
   // 1. 从 req.body 获取身份验证数据
   // (Multer 会处理 multipart/form-data, 文本字段在 req.body, 文件在 req.file)
   const { userAddress, signature, signatureMessage } = req.body;
