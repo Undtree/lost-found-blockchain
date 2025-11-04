@@ -90,4 +90,33 @@ async function analyzeImage(imagePath) {
   }
 }
 
-module.exports = { analyzeImage };
+/**
+ * 使用 OpenAI-compatible API 获取文本的嵌入向量
+ * @param {string} text - 需要被向量化的文本
+ * @returns {Promise<number[]>} 嵌入向量数组
+ */
+async function getTextEmbedding(text) {
+  try {
+    const response = await openai.embeddings.create({
+      model: "text-embedding-3-small", // [!! 核心 !!] 使用专用的嵌入模型
+      input: text.replace(/\n/g, ' '), // 清理文本中的换行符
+    });
+
+    // 检查返回的数据结构
+    if (!response.data || !response.data[0] || !response.data[0].embedding) {
+      throw new Error("AI 返回了无效的嵌入数据格式。");
+    }
+    
+    // 返回向量数组
+    return response.data[0].embedding;
+
+  } catch (err) {
+    console.error('OpenAI API (中转站) 嵌入出错:', err);
+    throw new Error('Agent 生成文本向量失败');
+  }
+}
+
+module.exports = { 
+  analyzeImage,
+  getTextEmbedding
+};

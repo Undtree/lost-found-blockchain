@@ -64,6 +64,11 @@ const itemSchema = new Schema({
     type: [String], // 存储标签的数组
     default: []
   },
+  // 用于 AI 向量搜索的嵌入字段
+  embedding: {
+    type: [Number],
+    default: []
+  },
 
   claims: [claimSchema]
 }, { timestamps: true }); // timestamps 会自动添加 createdAt 和 updatedAt 字段

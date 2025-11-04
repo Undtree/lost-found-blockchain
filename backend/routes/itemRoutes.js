@@ -4,8 +4,9 @@ const path = require('path');
 const { ethers } = require('ethers');
 const multer = require('multer'); // 引入 multer
 const Item = require('../models/item'); // 引入 Item 模型
-const { analyzeImage } = require('../utils/aiApi'); // [!! 核心修改: 引入新的 AI 工具 !!]
 const rateLimit = require('express-rate-limit');
+const cosineSimilarity = require('cosine-similarity');
+const { analyzeImage, getTextEmbedding } = require('../utils/aiApi');
 
 // 创建一个路由实例
 const router = express.Router();
@@ -285,26 +286,122 @@ router.post('/items/upload', upload.single('image'), async (req, res) => {
     metadataUrl,
     tokenId,
     status: 'available',
-    tags: parsedTags // [!! d. 保存 Tags 到 DB !!]
+    tags: parsedTags, // [!! d. 保存 Tags 到 DB !!]
+    // embedding 默认为 []
     // claims 默认为 []
   });
 
   try {
     const savedItem = await newItem.save();
-    return res.status(201).json({ 
+    res.status(201).json({ 
       message: '物品发布、链上铸造、存入 DB 均成功！', 
       data: savedItem, 
       txHash: txHash 
     });
+
+    generateAndSaveEmbedding(savedItem);
   } catch (err) {
-    console.error('链上成功，但存入 DB 失败:', err);
-    return res.status(500).json({ 
-      message: '链上成功，但存入 DB 失败', 
-      error: err, 
-      tokenId: tokenId, 
-      txHash: txHash 
-    });
+    console.error('POST /items/upload 路由出错:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: '发布物品时服务器内部出错', error: err.message });
+    }
   }
+});
+
+/**
+ * 异步生成嵌入向量并将其更新到数据库中。
+ * @param {object} savedItem - 刚存入数据库的 Mongoose Item 对象
+ */
+async function generateAndSaveEmbedding(savedItem) {
+  try {
+    console.log(`[后台任务] 开始为 Item ID: ${savedItem._id} 生成向量...`);
+    
+    // 1. 准备文本
+    const textToEmbed = savedItem.name + " " + savedItem.tags.join(" ");
+    
+    // 2. (耗时操作) 调用 AI
+    const embedding = await getTextEmbedding(textToEmbed);
+
+    // 3. (数据库 I/O) 更新数据库
+    await Item.findByIdAndUpdate(savedItem._id, {
+      $set: { embedding: embedding }
+    });
+
+    console.log(`[后台任务] 成功为 Item ID: ${savedItem._id} 保存向量。`);
+
+  } catch (embedErr) {
+    // 因为这个任务是后台运行的，用户不会看到这个错误
+    // 所以我们必须在服务器日志中记录它！
+    console.error(`[后台任务] 为 Item ID: ${savedItem._id} 生成向量失败:`, embedErr.message);
+  }
+}
+
+// GET /api/items/search 路由
+router.get('/items/search', async (req, res) => {
+  const { q } = req.query; 
+
+  if (!q || typeof q !== 'string' || q.trim() === '') {
+    return res.status(200).json({ message: '查询为空', data: [] });
+  }
+
+  try {
+    // 1. 将用户的搜索词向量化
+    const searchEmbedding = await getTextEmbedding(q);
+
+    // 2. 从数据库中找出所有可用的、且已生成向量的物品
+    const items = await Item.find({ 
+      status: 'available', 
+      embedding: { $exists: true, $ne: [] } 
+    }).select('_id name description location imageUrl status tokenId tags createdAt embedding');
+
+    // 3. 在 Node.js 内存中计算余弦相似度
+    const scoredItems = items.map(item => {
+      if (!item.embedding || item.embedding.length === 0) {
+        return { item, score: 0 };
+      }
+      
+      const score = cosineSimilarity(searchEmbedding, item.embedding);
+      
+      const itemObject = item.toObject(); 
+      itemObject.score = score;
+      
+      return itemObject;
+    });
+
+    // 4. [!! 核心修改 !!] 按分数从高到低排序 (在过滤前执行)
+    scoredItems.sort((a, b) => b.score - a.score);
+
+    // 5. [!! 核心修改 !!] 定义分级阈值 (从高到低)
+    const THRESHOLDS = [0.30, 0.25, 0.20]; // [高匹配, 中匹配, 低匹配]
+    
+    let finalResults = [];
+    let activeThreshold = null; // 记录当前生效的阈值
+
+    // 6. [!! 核心修改 !!] 遍历阈值，查找第一个能返回结果的级别
+    for (const threshold of THRESHOLDS) {
+      // 过滤出大于等于当前阈值的结果
+      const results = scoredItems.filter(item => item.score >= threshold);
+      
+      // 如果这一级别有结果
+      if (results.length > 0) {
+        finalResults = results;       // 采用这一档的结果
+        activeThreshold = threshold;  // 记录我们使用的是哪个阈值
+        break;                      // [重要] 停止查找，不再降级
+      }
+    }
+    
+    // 7. [!! 核心修改 !!] 返回结果和所用的阈值
+    // 如果连最低的 0.25 都没匹配到，finalResults 会是 [], activeThreshold 会是 null
+    res.status(200).json({ 
+      message: '搜索成功', 
+      data: finalResults,
+      threshold: activeThreshold // (例如: 0.7, 0.5, 0.25 或 null)
+    });
+
+  } catch (err) {
+    console.error('搜索时出错:', err);
+    res.status(500).json({ message: err.message || '搜索时服务器出错' });
+  }
 });
 
 // GET /items - 列出 DB 中的物品

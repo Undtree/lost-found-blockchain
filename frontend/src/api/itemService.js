@@ -128,4 +128,17 @@ export default {
   getChatMessages(id, authData) {
     return apiClient.post(`/items/${id}/messages`, authData)
   },
+
+  /**
+   * 使用 AI 向量搜索物品
+   * @param {string} query - 用户的搜索词
+   */
+  searchItems(query) {
+    // 使用 URL search parameters ( ?q=... ) 发送 GET 请求
+    return apiClient.get('/items/search', {
+      params: {
+        q: query
+      }
+    })
+  },
 }

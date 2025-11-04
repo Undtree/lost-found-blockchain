@@ -1,8 +1,25 @@
 <template>
   <div class="home-title-block">
     <h1 class="main-title">物品大厅</h1>
-    <p class="subtitle">所有等待认领的物品</p>
+    <p class="subtitle">{{ subtitleText }}</p>
   </div>
+
+  <el-row justify="center" class="search-bar-row">
+    <el-col :xs="24" :sm="20" :md="18" :lg="16">
+      <el-input
+        v-model="searchQuery"
+        placeholder="试试用 Agent 搜索“我丢的蓝色耳机”..."
+        size="large"
+        clearable
+        @clear="handleClearSearch"
+        @keydown.enter="handleSearch"
+      >
+        <template #append>
+          <el-button :icon="Search" @click="handleSearch" :loading="loading" />
+        </template>
+      </el-input>
+    </el-col>
+  </el-row>
 
   <el-divider />
 
@@ -11,10 +28,18 @@
 
     <el-empty
       description="目前还没有人发布物品"
-      v-else-if="!loading && items.length === 0"
-      key="empty"
+      v-else-if="!loading && items.length === 0 && !isSearchActive"
+      key="empty-default"
     >
       <el-button type="primary" @click="$router.push('/upload')"> 我来发布第一个 </el-button>
+    </el-empty>
+
+    <el-empty
+      :description="`未找到与 '${searchQuery}' 相关的物品`"
+      v-else-if="!loading && items.length === 0 && isSearchActive"
+      key="empty-search"
+    >
+      <el-button type="primary" plain @click="handleClearSearch"> 清空搜索 </el-button>
     </el-empty>
 
     <el-row :gutter="20" v-else key="content">
@@ -33,9 +58,27 @@
           @click="goToDetail(item._id)"
           style="cursor: pointer"
         >
+          <div class="score-badge" v-if="item.score">
+            Agent 相似度: {{ (item.score * 100).toFixed(0) }}%
+          </div>
+
           <img :src="item.imageUrl" class="image" />
           <div style="padding: 14px">
             <h3 class="card-title">{{ item.name }}</h3>
+
+            <div class="tags-container" v-if="item.tags && item.tags.length > 0">
+              <el-tag
+                v-for="tag in item.tags.slice(0, 3)"
+                :key="tag"
+                type="info"
+                effect="plain"
+                disable-transitions
+                size="small"
+              >
+                {{ tag }}
+              </el-tag>
+            </div>
+
             <div class="description-text">
               {{ item.description }}
             </div>
@@ -56,19 +99,51 @@
 </template>
 
 <script setup>
-// [!! 核心简化: 移除所有 'handleClaim' 相关的 imports !!]
-import { ref, onMounted } from 'vue'
+// [!! 核心修改 !!] 导入 computed
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElNotification } from 'element-plus'
 import itemService from '@/api/itemService.js'
-// (useEthers, ethers, ContractABI, toRaw 等已全部移除)
+import { Search } from '@element-plus/icons-vue'
 
 const items = ref([])
 const loading = ref(true)
 const router = useRouter()
+const searchQuery = ref('')
+const isSearchActive = ref(false)
+// [!! 核心修改 !!] 新增状态，用于存储后端返回的阈值
+const activeSearchThreshold = ref(null)
+
 const goToDetail = (id) => {
   router.push(`/item/${id}`)
 }
+
+// [!! 核心修改 !!] 新增计算属性，用于动态显示副标题
+const subtitleText = computed(() => {
+  if (!isSearchActive.value) {
+    return '所有等待认领的物品';
+  }
+
+  // 正在加载时
+  if (loading.value) {
+    return 'Agent 正在搜索...';
+  }
+
+  // 有结果时，根据阈值显示不同信息
+  if (items.value.length > 0 && activeSearchThreshold.value) {
+    let level = '相关';
+    if (activeSearchThreshold.value >= 0.7) {
+      level = '高度匹配';
+    } else if (activeSearchThreshold.value < 0.5) {
+      level = '可能相关';
+    }
+    return `已找到 ${items.value.length} 个${level}的结果 (阈值 ≥ ${activeSearchThreshold.value})`;
+  }
+
+  // 搜索活跃，但无结果 (这种情况会由 el-empty 处理，但保留文本)
+  return 'Agent 搜索结果';
+});
+
 
 // fetchItems 函数 (保持不变)
 const fetchItems = async () => {
@@ -84,13 +159,58 @@ const fetchItems = async () => {
   }
 }
 
-onMounted(fetchItems)
+// [!! 核心修改 !!] 搜索函数
+const handleSearch = async () => {
+  if (!searchQuery.value.trim()) {
+    handleClearSearch()
+    return
+  }
 
-// [!! 核心移除: 整个 handleClaim 函数已不在这里 !!]
+  loading.value = true
+  isSearchActive.value = true
+  activeSearchThreshold.value = null // [!! 核心修改 !!] 重置阈值
+
+  try {
+    const response = await itemService.searchItems(searchQuery.value);
+
+    // [!! 核心修改 !!] 适应新的 API 响应
+    items.value = response.data.data; // items 数组现在是搜索结果
+    activeSearchThreshold.value = response.data.threshold; // 存储命中的阈值
+
+  } catch (err) {
+    ElNotification.error('Agent 搜索失败: ' + (err.response?.data?.message || err.message));
+    items.value = []; // 搜索失败时清空
+  } finally {
+    loading.value = false
+  }
+}
+
+// [!! 核心修改 !!] 清空搜索函数
+const handleClearSearch = () => {
+  searchQuery.value = ''
+  isSearchActive.value = false
+  activeSearchThreshold.value = null // [!! 核心修改 !!] 清空阈值
+  fetchItems() // 重新加载所有物品
+}
+
+// 页面加载时，默认获取所有物品 (不变)
+onMounted(fetchItems)
 </script>
 
 <style scoped>
 /* (所有样式保持不变) */
+.search-bar-row {
+  margin-bottom: 20px;
+}
+.search-bar-row :deep(.el-input-group__append) {
+  background-color: var(--el-color-primary);
+}
+.search-bar-row :deep(.el-input-group__append .el-icon) {
+  color: white;
+}
+.search-bar-row :deep(.el-input-group__append button:hover) {
+  background-color: var(--el-color-primary-light-3);
+}
 .home-title-block {
   margin-top: 20px;
   margin-bottom: 20px;
@@ -106,6 +226,8 @@ onMounted(fetchItems)
   color: var(--el-text-color-regular);
   margin: 0;
   margin-top: 8px;
+  /* [!! 核心修改 !!] 增加一个最小高度，防止在加载时文本切换导致页面跳动 */
+  min-height: 1.2em;
 }
 .image {
   width: 100%;
@@ -122,16 +244,37 @@ onMounted(fetchItems)
   color: var(--el-text-color-primary);
   word-break: break-all;
 }
+.score-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: var(--el-color-primary-light-3);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  z-index: 10;
+}
+.tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 10px;
+  height: 24px; /* 固定高度防止跳动 */
+  overflow: hidden;
+}
+
 .description-text {
   color: var(--el-text-color-regular);
   font-size: 14px;
   line-height: 1.5;
-  height: 63px;
+  height: 42px;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   word-break: break-all;
 }
@@ -141,13 +284,11 @@ onMounted(fetchItems)
   justify-content: space-between;
   align-items: center;
 }
-.card-footer :deep(.el-button-group > .el-button.is-plain:not(:first-child)) {
-  border-left-color: var(--el-color-primary-light-5);
-}
 .el-col :deep(.el-card) {
   transition:
     transform 0.25s ease-out,
     box-shadow 0.25s ease-out;
+  position: relative;
 }
 .el-col :deep(.el-card:hover) {
   transform: translateY(-10px);
