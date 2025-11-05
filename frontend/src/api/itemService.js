@@ -24,6 +24,15 @@ export default {
     return apiClient.get(`/items/${id}`)
   },
 
+  updateItem(id, itemData) {
+  // 因为可能包含文件上传，我们使用 multipart/form-data
+    return apiClient.put(`/items/${id}`, itemData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  },
+
   /**
    * 上传并发布新物品
    * @param {FormData} formData - 包含图片和表单数据的 FormData

@@ -166,6 +166,17 @@
               </div>
 
               <div v-if="isFinder">
+                <div v-if="isAvailable" class="finder-main-actions">
+                   <h3 class="action-area-title">管理我的发布</h3>
+                   <el-button type="primary" :icon="Edit" @click="openEditDialog">
+                     修改物品信息
+                   </el-button>
+                   <el-button type="danger" :icon="Delete" plain disabled>
+                     归档物品 (暂未开放)
+                   </el-button>
+                </div>
+                <el-divider v-if="isAvailable" />
+
                 <h3 class="action-area-title" v-if="isAvailable">审核认领申请</h3>
                 <h3 class="action-area-title" v-if="isPendingHandover">等待交接</h3>
                 <h3 class="action-area-title" v-if="item.status === 'claimed'">交割完成</h3>
@@ -299,6 +310,51 @@
     </template>
   </el-dialog>
 
+  <el-dialog v-model="editDialogVisible" title="修改物品信息" width="90%" :style="{ maxWidth: '600px' }" :close-on-click-modal="false">
+    <el-form :model="editForm" label-position="top" ref="editFormRef">
+      <el-form-item label="物品名称" prop="name" :rules="[{ required: true, message: '请输入物品名称', trigger: 'blur' }]">
+        <el-input v-model="editForm.name" placeholder="例如：一把黑色的雨伞" />
+      </el-form-item>
+      <el-form-item label="物品描述" prop="description" :rules="[{ required: true, message: '请输入物品描述', trigger: 'blur' }]">
+        <el-input v-model="editForm.description" type="textarea" :rows="3" placeholder="详细描述一下物品的特征..." />
+      </el-form-item>
+      <el-form-item label="拾获地点" prop="location" :rules="[{ required: true, message: '请输入拾获地点', trigger: 'blur' }]">
+        <el-input v-model="editForm.location" placeholder="例如：图书馆二楼自习室" />
+      </el-form-item>
+      <el-form-item label="标签 (可选)" prop="tags">
+         <el-select v-model="editForm.tags" multiple filterable allow-create default-first-option placeholder="输入或选择标签" style="width: 100%;">
+          <!-- 这里可以预留一些常用标签选项 -->
+        </el-select>
+      </el-form-item>
+       <el-form-item label="更换图片 (可选)" prop="image">
+         <el-upload
+          action="#"
+          list-type="picture-card"
+          :auto-upload="false"
+          :limit="1"
+          :file-list="editFileList"
+          @change="handleEditFileChange"
+          @remove="handleEditFileRemove"
+        >
+          <el-icon><Plus /></el-icon>
+          <template #tip>
+            <div class="el-upload__tip">
+              仅允许上传一张图片，新图片会覆盖旧图片。
+            </div>
+          </template>
+        </el-upload>
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleUpdateItem" :loading="editLoading">
+          确认修改 (需钱包签名)
+        </el-button>
+      </span>
+    </template>
+  </el-dialog>
+
   <Transition name="backdrop-fade">
     <div v-if="isPreviewVisible" class="image-preview-backdrop" @click="closePreview"></div>
   </Transition>
@@ -320,10 +376,10 @@
 
 <script setup>
 import { ref, onMounted, computed, toRaw, watch, onUnmounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ethers } from 'ethers'
-import { ElNotification } from 'element-plus'
-import { ZoomIn, ChatDotRound } from '@element-plus/icons-vue'
+import { ElNotification, ElMessageBox } from 'element-plus'
+import { ZoomIn, ChatDotRound, Edit, Delete, Plus } from '@element-plus/icons-vue'
 import { useEthers } from '@/composables/useEthers.js'
 import itemService from '@/api/itemService.js'
 import ContractABI from '@/contracts/LostItemNFT.json'
@@ -331,6 +387,7 @@ import ChatDrawer from '@/components/ChatDrawer.vue'
 
 // --- 状态定义 ---
 const route = useRoute()
+const router = useRouter()
 const item = ref(null)
 const loading = ref(true)
 
@@ -379,6 +436,18 @@ watch(isPreviewVisible, (newVal) => {
   else { document.body.style.overflow = '' }
 })
 onUnmounted(() => { document.body.style.overflow = '' })
+
+const editDialogVisible = ref(false)
+const editLoading = ref(false)
+const editFormRef = ref(null)
+const editForm = ref({
+  name: '',
+  description: '',
+  location: '',
+  tags: []
+})
+const editFile = ref(null) // 用于存储新的文件对象
+const editFileList = ref([]) // 用于 el-upload 组件的显示
 
 // --- 计算属性 (保持不变) ---
 const isFinder = computed(() => {
@@ -754,6 +823,103 @@ const handleReject = async (claim) => {
     rejectLoadingId.value = null
   }
 }
+
+const openEditDialog = () => {
+  // 使用 item 的当前数据深拷贝填充表单
+  editForm.value = {
+    name: item.value.name,
+    description: item.value.description,
+    location: item.value.location,
+    tags: [...item.value.tags] // 确保是数组的拷贝
+  }
+  // 设置 el-upload 的初始文件列表以显示当前图片
+  editFileList.value = [{ name: 'current_image', url: item.value.imageUrl }]
+  // 重置可能已选择的新文件
+  editFile.value = null
+  // 打开对话框
+  editDialogVisible.value = true
+}
+
+const handleEditFileChange = (file, fileList) => {
+  // 我们只关心选择的文件，不关心 el-upload 内部的状态
+  // raw 属性是真正的 File 对象
+  if (file.raw) {
+    editFile.value = file.raw
+  }
+  // 保持 fileList 只有一个文件
+  if (fileList.length > 1) {
+    fileList.splice(0, 1)
+  }
+}
+
+const handleEditFileRemove = () => {
+  editFile.value = null
+  editFileList.value = []
+}
+
+const handleUpdateItem = async () => {
+  if (!editFormRef.value) return
+  
+  // 表单验证
+  await editFormRef.value.validate(async (valid) => {
+    if (!valid) {
+      ElNotification.error('请检查表单必填项！')
+      return
+    }
+
+    if (!signer.value || !account.value) {
+      ElNotification.error('请先连接钱包并授权签名')
+      return
+    }
+    editLoading.value = true
+
+    // 1. 签名
+    let signature
+    const messageToSign = `我 (Finder: ${account.value}) 确认修改物品信息 (ID: ${item.value._id})`
+    try {
+      const rawSigner = toRaw(signer.value)
+      ElNotification.info('请在钱包中签名以确认修改...')
+      signature = await rawSigner.signMessage(messageToSign)
+    } catch (err) {
+      console.error('签名失败:', err)
+      ElNotification.error('您取消了签名，或签名失败')
+      editLoading.value = false
+      return
+    }
+
+    // 2. 准备 FormData
+    const formData = new FormData()
+    formData.append('name', editForm.value.name)
+    formData.append('description', editForm.value.description)
+    formData.append('location', editForm.value.location)
+    formData.append('finderAddress', account.value)
+    formData.append('signature', signature)
+    formData.append('signatureMessage', messageToSign)
+    // Tags 需要字符串化
+    formData.append('tags', JSON.stringify(editForm.value.tags))
+    
+    // 如果用户选择了新文件，则添加到 FormData
+    if (editFile.value) {
+      formData.append('image', editFile.value)
+    }
+
+    // 3. 发送请求
+    try {
+      const response = await itemService.updateItem(item.value._id, formData)
+      item.value = response.data.data // 使用后端返回的最新数据更新页面
+      ElNotification.success('物品信息更新成功！')
+      editDialogVisible.value = false
+    } catch (err) {
+      console.error('更新失败:', err)
+      ElNotification.error({
+        title: '更新失败',
+        message: err.response?.data?.message || err.message
+      })
+    } finally {
+      editLoading.value = false
+    }
+  })
+}
 </script>
 
 <style scoped>
@@ -965,5 +1131,11 @@ const handleReject = async (claim) => {
 }
 .el-alert {
   margin-top: 0px;
+}
+.finder-main-actions {
+  padding-bottom: 20px;
+}
+.finder-main-actions .action-area-title {
+  margin-bottom: 15px;
 }
 </style>
