@@ -123,31 +123,49 @@ describe("LostItemNFT 合约测试", function () {
   });
 
   // 测试 4: 更新 URI
-  describe("更新元数据 (updateTokenURI)", function () {
+// [!! 核心修改 !!] 测试 4: 更新 URI (修改后)
+describe("更新元数据 (updateTokenURI)", function () {
     
+    // 辅助函数，保持不变
     async function mintOneItemFixture() {
-      const { nft, deployer, finder, tokenURI, loster, randomUser } = await loadFixture(deployLostItemNFTFixture);
+      const { nft, deployer, finder, tokenURI, loster, randomUser, MINTER_ROLE } = await loadFixture(deployLostItemNFTFixture);
       await nft.connect(deployer).mintItem(finder.address, tokenURI);
-      return { nft, deployer, finder, tokenURI, loster, randomUser };
+      return { nft, deployer, finder, tokenURI, loster, randomUser, MINTER_ROLE };
     }
     
     const newTokenURI = "http://my-server.com/api/metadata/1-updated";
 
-    it("应该允许当前所有者 (finder) 更新 token URI", async function () {
-      const { nft, finder } = await loadFixture(mintOneItemFixture);
+    it("应该允许拥有 MINTER_ROLE 的账户 (部署者) 更新 token URI", async function () {
+      const { nft, deployer } = await loadFixture(mintOneItemFixture);
       const tokenId = 1;
 
-      await nft.connect(finder).updateTokenURI(tokenId, newTokenURI);
+      // 使用 deployer (拥有 MINTER_ROLE) 来调用
+      await nft.connect(deployer).updateTokenURI(tokenId, newTokenURI);
+      
+      // 验证 URI 是否已更新
       expect(await nft.tokenURI(tokenId)).to.equal(newTokenURI);
     });
 
-    it("应该禁止非所有者 (randomUser) 更新 token URI", async function () {
+    it("应该禁止 NFT 的当前所有者 (finder, 无 MINTER_ROLE) 更新 token URI", async function () {
+      const { nft, finder } = await loadFixture(mintOneItemFixture);
+      const tokenId = 1;
+
+      // finder 是所有者，但不具备 MINTER_ROLE
+      // 期望交易被拒绝，并抛出 AccessControl 的特定错误
+      await expect(
+        nft.connect(finder).updateTokenURI(tokenId, newTokenURI)
+      ).to.be.revertedWithCustomError(nft, "AccessControlUnauthorizedAccount");
+    });
+
+    it("应该禁止既非所有者也无 MINTER_ROLE 的账户 (randomUser) 更新 token URI", async function () {
       const { nft, randomUser } = await loadFixture(mintOneItemFixture);
       const tokenId = 1;
 
+      // randomUser 既不是所有者，也没有 MINTER_ROLE
+      // 期望交易被拒绝，并抛出 AccessControl 的特定错误
       await expect(
         nft.connect(randomUser).updateTokenURI(tokenId, newTokenURI)
-      ).to.be.revertedWithCustomError(nft, "ERC721InsufficientApproval");
+      ).to.be.revertedWithCustomError(nft, "AccessControlUnauthorizedAccount");
     });
-  });
+});
 });
