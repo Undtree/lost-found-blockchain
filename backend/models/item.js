@@ -7,7 +7,7 @@ const claimSchema = new Schema({
   
   status: {
     type: String,
-    enum: ['pending', 'approved', 'rejected'],
+    enum: ['pending', 'approved', 'rejected', 'archived'],
     default: 'pending'
   }
 }, { timestamps: true }); // 'createdAt' 会告诉我们申请提交的时间

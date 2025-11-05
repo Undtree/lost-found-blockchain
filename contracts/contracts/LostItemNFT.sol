@@ -56,6 +56,12 @@ contract LostItemNFT is ERC721URIStorage, AccessControl {
 
     function updateTokenURI(uint256 tokenId, string memory newTokenURI) external {
         _checkAuthorized(ownerOf(tokenId), msg.sender, tokenId); 
+        /* Gemini 建议 _checkAuthorized() 改为：
+         * require(
+         *     _isApprovedOrOwner(msg.sender, tokenId) || hasRole(MINTER_ROLE, msg.sender),
+         *     "Caller is not owner nor has minter role"
+         * );
+        **/
         _setTokenURI(tokenId, newTokenURI);
     }
 
