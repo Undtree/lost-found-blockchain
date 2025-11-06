@@ -73,7 +73,7 @@
                   </div>
                 </template>
 
-                <el-form-item label="物品名称" prop="name">
+                <el-form-item label="Agent 建议物品名称" prop="name">
                   <el-input v-model="form.name" placeholder="例如：一把黑色的天堂伞"></el-input>
                 </el-form-item>
                 <el-form-item label="物品描述" prop="description">
@@ -92,7 +92,8 @@
                     filterable
                     allow-create
                     default-first-option
-                    placeholder="Agent 将自动填充标签，你也可以手动添加"
+                    :reserve-keyword="false"
+                    placeholder="Agent 将自动填充，你也可以手动添加"
                     style="width: 100%"
                   >
                     <el-option

@@ -36,7 +36,7 @@
                     <div class="custom-descriptions-value">{{ item.location }}</div>
                   </div>
                   <div class="custom-descriptions-row" v-if="item.tags && item.tags.length > 0">
-                    <div class="custom-descriptions-label">AI 标签</div>
+                    <div class="custom-descriptions-label">标签</div>
                     <div class="custom-descriptions-value tags-container">
                       <el-tag
                         v-for="tag in item.tags"
@@ -167,13 +167,17 @@
 
               <div v-if="isFinder">
                 <div v-if="isAvailable" class="finder-main-actions">
-                   <h3 class="action-area-title">管理我的发布</h3>
-                   <el-button type="primary" :icon="Edit" @click="openEditDialog">
-                     修改物品信息
-                   </el-button>
-                   <el-button type="danger" :icon="Delete" plain disabled>
-                     归档物品 (暂未开放)
-                   </el-button>
+                    <h3 class="action-area-title">管理我的发布</h3>
+                    <el-button type="primary" :icon="Edit" @click="openEditDialog">
+                      修改物品信息
+                    </el-button>
+                    <el-text
+                      type="info"
+                      size="small"
+                      style="margin-top: 10px; display: block"
+                    >
+                    点击后可对物品信息进行修改。
+                  </el-text>
                 </div>
                 <el-divider v-if="isAvailable" />
 
@@ -323,28 +327,52 @@
       </el-form-item>
       <el-form-item label="标签 (可选)" prop="tags">
          <el-select v-model="editForm.tags" multiple filterable allow-create default-first-option placeholder="输入或选择标签" style="width: 100%;">
-          <!-- 这里可以预留一些常用标签选项 -->
-        </el-select>
+          </el-select>
       </el-form-item>
+
        <el-form-item label="更换图片 (可选)" prop="image">
          <el-upload
+          ref="editUploadRef"
           action="#"
-          list-type="picture-card"
           :auto-upload="false"
           :limit="1"
-          :file-list="editFileList"
-          @change="handleEditFileChange"
-          @remove="handleEditFileRemove"
+          :on-exceed="handleEditExceed"
+          :on-change="handleEditFileChange"
+          :show-file-list="false"
+          class="custom-uploader-wrapper"
         >
-          <el-icon><Plus /></el-icon>
+          <template #default>
+            <div
+              class="custom-uploader-content"
+              :style="{ width: '200px', aspectRatio: '1/1', maxHeight: '200px' }"
+            >
+              <Transition name="preview-fade-scale">
+                <div v-if="editImageUrlPreview" class="image-preview-container">
+                  <img :src="editImageUrlPreview" class="preview-image" alt="Image preview" />
+                  <div class="image-actions-overlay">
+                    <el-icon class="delete-icon" :size="30" @click.stop="triggerEditRemove">
+                      <CircleClose />
+                    </el-icon>
+                  </div>
+                </div>
+              </Transition>
+
+              <div v-if="!editImageUrlPreview" class="upload-prompt">
+                <el-icon><Plus /></el-icon>
+                <div class="uploader-text">点击上传图片</div>
+                <div class="upload-tip-inline">（将替换现有图片）</div>
+              </div>
+            </div>
+          </template>
+
           <template #tip>
-            <div class="el-upload__tip">
-              仅允许上传一张图片，新图片会覆盖旧图片。
+            <div class="upload-tip">
+              <el-text type="info">新图片会覆盖旧图片。点击 "X" 可清空选择 (不删除旧图)。</el-text>
             </div>
           </template>
         </el-upload>
       </el-form-item>
-    </el-form>
+      </el-form>
     <template #footer>
       <span class="dialog-footer">
         <el-button @click="editDialogVisible = false">取消</el-button>
@@ -376,10 +404,10 @@
 
 <script setup>
 import { ref, onMounted, computed, toRaw, watch, onUnmounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { ethers } from 'ethers'
-import { ElNotification, ElMessageBox } from 'element-plus'
-import { ZoomIn, ChatDotRound, Edit, Delete, Plus } from '@element-plus/icons-vue'
+import { ElNotification } from 'element-plus'
+import { ZoomIn, ChatDotRound, Edit, Plus, CircleClose } from '@element-plus/icons-vue'
 import { useEthers } from '@/composables/useEthers.js'
 import itemService from '@/api/itemService.js'
 import ContractABI from '@/contracts/LostItemNFT.json'
@@ -387,7 +415,6 @@ import ChatDrawer from '@/components/ChatDrawer.vue'
 
 // --- 状态定义 ---
 const route = useRoute()
-const router = useRouter()
 const item = ref(null)
 const loading = ref(true)
 
@@ -435,8 +462,16 @@ watch(isPreviewVisible, (newVal) => {
   if (newVal) { document.body.style.overflow = 'hidden' }
   else { document.body.style.overflow = '' }
 })
-onUnmounted(() => { document.body.style.overflow = '' })
 
+onUnmounted(() => {
+  document.body.style.overflow = ''
+  // 清理可能存在的 blob URL
+  if (editImageUrlPreview.value && editImageUrlPreview.value.startsWith('blob:')) {
+    URL.revokeObjectURL(editImageUrlPreview.value)
+  }
+})
+
+// --- 修改弹窗相关状态 ---
 const editDialogVisible = ref(false)
 const editLoading = ref(false)
 const editFormRef = ref(null)
@@ -447,7 +482,8 @@ const editForm = ref({
   tags: []
 })
 const editFile = ref(null) // 用于存储新的文件对象
-const editFileList = ref([]) // 用于 el-upload 组件的显示
+const editUploadRef = ref(null) // el-upload 组件的 ref
+const editImageUrlPreview = ref(null) // 用于新版上传器的预览 URL
 
 // --- 计算属性 (保持不变) ---
 const isFinder = computed(() => {
@@ -587,7 +623,7 @@ const handleSubmitApplication = async () => {
 
 // --- (Finder) 方法 ---
 
-// [!! 新增 !!] 阶段一：链下批准
+// 阶段一：链下批准
 const handleApproveStage1 = async (claim) => {
   approveLoadingId.value = claim._id;
 
@@ -635,7 +671,7 @@ const handleApproveStage1 = async (claim) => {
   }
 }
 
-// [!! 新增 !!] 回滚：取消交接
+// 回滚：取消交接
 const handleCancelHandover = async () => {
   cancelLoadingId.value = true; // 只有一个取消按钮，用布尔值即可
 
@@ -682,7 +718,7 @@ const handleCancelHandover = async () => {
   }
 }
 
-// [!! 修正: 包含之前对 catch 块的修复 !!] 阶段二：链上交割
+// 阶段二：链上交割
 const handleApproveStage2_Finalize = async (claim) => {
   const losterAddressToReceive = claim.applierAddress
   const itemToClaim = item.value
@@ -707,7 +743,6 @@ const handleApproveStage2_Finalize = async (claim) => {
     try {
       validLosterAddress = ethers.getAddress(losterAddressToReceive)
     } catch (validationError) {
-      // [!! 已修复 !!]
       console.error('Loster 地址无效:', validationError)
       ElNotification.error('申请人地址无效。无法转移。')
       finalizeLoadingId.value = null
@@ -717,7 +752,6 @@ const handleApproveStage2_Finalize = async (claim) => {
     try {
       tokenIdBigInt = BigInt(itemToClaim.tokenId)
     } catch (castError) {
-      // [!! 已修复 !!]
       console.error('Token ID 转换 BigInt 失败:', castError)
       ElNotification.error(`物品 Token ID (${itemToClaim.tokenId}) 无效。`)
       finalizeLoadingId.value = null
@@ -737,7 +771,7 @@ const handleApproveStage2_Finalize = async (claim) => {
     const tx = await contract.claimItem(validLosterAddress, tokenIdBigInt)
     await tx.wait()
 
-    // [!! 核心 !!] 链上成功后，立即调用后端 API (claim-db) 来同步
+    // 链上成功后，立即调用后端 API (claim-db) 来同步
     try {
       const response = await itemService.markItemAsClaimed(
         itemToClaim._id,
@@ -774,7 +808,7 @@ const handleApproveStage2_Finalize = async (claim) => {
   }
 }
 
-// [!! (Finder) 拒绝 (保持不变) !!]
+// (Finder) 拒绝
 const handleReject = async (claim) => {
   const claimToReject = claim;
   rejectLoadingId.value = claimToReject._id;
@@ -824,6 +858,7 @@ const handleReject = async (claim) => {
   }
 }
 
+// --- 修改物品相关方法 ---
 const openEditDialog = () => {
   // 使用 item 的当前数据深拷贝填充表单
   editForm.value = {
@@ -832,110 +867,135 @@ const openEditDialog = () => {
     location: item.value.location,
     tags: [...item.value.tags] // 确保是数组的拷贝
   }
-  // 设置 el-upload 的初始文件列表以显示当前图片
-  editFileList.value = [{ name: 'current_image', url: item.value.imageUrl }]
+  // 设置新版上传器的预览为当前图片
+  editImageUrlPreview.value = item.value.imageUrl
   // 重置可能已选择的新文件
   editFile.value = null
+  // 清理 el-upload 内部的文件列表
+  if (editUploadRef.value) {
+    editUploadRef.value.clearFiles()
+  }
   // 打开对话框
   editDialogVisible.value = true
 }
 
-const handleEditFileChange = (file, fileList) => {
-  // 我们只关心选择的文件，不关心 el-upload 内部的状态
-  // raw 属性是真正的 File 对象
-  if (file.raw) {
-    editFile.value = file.raw
+// (from UploadView) :on-exceed
+const handleEditExceed = (files) => {
+  if (editUploadRef.value) {
+    editUploadRef.value.clearFiles() // 清除旧文件
+    editUploadRef.value.handleStart(files[0]) // 手动添加新文件（会触发 on-change）
   }
-  // 保持 fileList 只有一个文件
-  if (fileList.length > 1) {
-    fileList.splice(0, 1)
-  }
+  ElNotification.warning('只能上传一张图片，已自动替换为新图片')
 }
 
-const handleEditFileRemove = () => {
+// (from UploadView) :on-change
+const handleEditFileChange = (uploadFile) => {
+  // Revoke old blob URL if it exists
+  if (editImageUrlPreview.value && editImageUrlPreview.value.startsWith('blob:')) {
+    URL.revokeObjectURL(editImageUrlPreview.value)
+  }
+  editFile.value = uploadFile.raw
+  editImageUrlPreview.value = URL.createObjectURL(uploadFile.raw)
+}
+
+// (from UploadView) 内部删除逻辑
+const handleEditRemove = () => {
+  if (editImageUrlPreview.value && editImageUrlPreview.value.startsWith('blob:')) {
+    URL.revokeObjectURL(editImageUrlPreview.value)
+  }
   editFile.value = null
-  editFileList.value = []
+  editImageUrlPreview.value = null // Shows the '+' prompt
 }
 
+// (from UploadView) 'x' 图标的点击处理
+const triggerEditRemove = () => {
+  handleEditRemove()
+  if (editUploadRef.value) {
+    editUploadRef.value.clearFiles()
+  }
+}
+
+// 提交更新
 const handleUpdateItem = async () => {
   if (!editFormRef.value) return
-  
+
   // 表单验证
   await editFormRef.value.validate(async (valid) => {
-    if (!valid) {
-      ElNotification.error('请检查表单必填项！')
-      return
-    }
+    if (valid) {
+      // 钱包检查
+      if (!account.value || !signer.value) {
+        ElNotification.error('请先连接钱包并授权签名')
+        return
+      }
+      editLoading.value = true
 
-    if (!signer.value || !account.value) {
-      ElNotification.error('请先连接钱包并授权签名')
-      return
-    }
-    editLoading.value = true
+      // 1. 签名
+      let signature
+      const messageToSign = `我 (Finder: ${account.value}) 确认修改物品信息 (ID: ${item.value._id})`
+      try {
+        const rawSigner = toRaw(signer.value)
+        ElNotification.info('请在钱包中签名以确认修改...')
+        signature = await rawSigner.signMessage(messageToSign)
+      } catch (err) {
+        console.error('签名失败:', err)
+        ElNotification.error('您取消了签名，或签名失败')
+        editLoading.value = false
+        return
+      }
 
-    // 1. 签名
-    let signature
-    const messageToSign = `我 (Finder: ${account.value}) 确认修改物品信息 (ID: ${item.value._id})`
-    try {
-      const rawSigner = toRaw(signer.value)
-      ElNotification.info('请在钱包中签名以确认修改...')
-      signature = await rawSigner.signMessage(messageToSign)
-    } catch (err) {
-      console.error('签名失败:', err)
-      ElNotification.error('您取消了签名，或签名失败')
-      editLoading.value = false
-      return
-    }
+      // 2. 准备 FormData
+      const formData = new FormData()
+      formData.append('name', editForm.value.name)
+      formData.append('description', editForm.value.description)
+      formData.append('location', editForm.value.location)
+      formData.append('finderAddress', account.value)
+      formData.append('signature', signature)
+      formData.append('signatureMessage', messageToSign)
+      // Tags 需要字符串化
+      formData.append('tags', JSON.stringify(editForm.value.tags))
 
-    // 2. 准备 FormData
-    const formData = new FormData()
-    formData.append('name', editForm.value.name)
-    formData.append('description', editForm.value.description)
-    formData.append('location', editForm.value.location)
-    formData.append('finderAddress', account.value)
-    formData.append('signature', signature)
-    formData.append('signatureMessage', messageToSign)
-    // Tags 需要字符串化
-    formData.append('tags', JSON.stringify(editForm.value.tags))
-    
-    // 如果用户选择了新文件，则添加到 FormData
-    if (editFile.value) {
-      formData.append('image', editFile.value)
-    }
+      // 如果用户选择了新文件 (editFile.value)，则添加到 FormData
+      if (editFile.value) {
+        formData.append('image', editFile.value)
+      }
 
-    // 3. 发送请求
-    try {
-      const response = await itemService.updateItem(item.value._id, formData)
-      item.value = response.data.data // 使用后端返回的最新数据更新页面
-      ElNotification.success('物品信息更新成功！')
-      editDialogVisible.value = false
-    } catch (err) {
-      console.error('更新失败:', err)
-      ElNotification.error({
-        title: '更新失败',
-        message: err.response?.data?.message || err.message
-      })
-    } finally {
-      editLoading.value = false
+      // 3. 发送请求
+      try {
+        const response = await itemService.updateItem(item.value._id, formData)
+        item.value = response.data.data // 使用后端返回的最新数据更新页面
+        ElNotification.success('物品信息更新成功！')
+        editDialogVisible.value = false
+      } catch (err) {
+        console.error('更新失败:', err)
+        ElNotification.error({
+          title: '更新失败',
+          message: err.response?.data?.message || err.message
+        })
+      } finally {
+        editLoading.value = false
+      }
+    } else {
+      ElNotification.error('请检查表单是否填写完整')
+      return false
     }
   })
 }
 </script>
 
 <style scoped>
-/* [!! 样式新增 !!] Finder 聊天按钮的容器 */
+/* Finder 聊天按钮的容器 */
 .finder-chat-button {
   margin-bottom: 20px;
   padding-bottom: 20px;
   border-bottom: 1px solid var(--el-border-color-lighter);
 }
 
-/* [!! 样式新增 !!] 图片卡片包裹器 */
+/* 图片卡片包裹器 */
 .image-card-wrapper {
   overflow: hidden;
 }
 
-/* [!! 样式修改 !!] 移除 action-divider, 改用 action-card-wrapper */
+/* 移除 action-divider, 改用 action-card-wrapper */
 .action-card-wrapper {
   margin-top: 10px;
 }
@@ -1132,10 +1192,136 @@ const handleUpdateItem = async () => {
 .el-alert {
   margin-top: 0px;
 }
-.finder-main-actions {
-  padding-bottom: 20px;
-}
 .finder-main-actions .action-area-title {
-  margin-bottom: 15px;
+  margin-bottom: 20px;
+}
+
+/* --- 从 UploadView.vue 复制的样式 --- */
+
+/* --- 删除动画 --- */
+.preview-fade-scale-leave-active {
+  /* 离开时的动画 */
+  transition:
+    opacity 0.3s ease-out,
+    transform 0.3s ease-out;
+}
+.preview-fade-scale-leave-to {
+  /* 离开的最终状态 */
+  opacity: 0;
+  transform: scale(0.8); /* 缩小一点 */
+}
+
+.upload-tip {
+  width: 100%;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+/* --- 自定义上传器样式 --- */
+.custom-uploader-wrapper {
+  width: 100%;
+}
+
+.custom-uploader-wrapper :deep(.el-upload) {
+  /* 让 el-upload 的根元素撑满容器 */
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* [!! 新增 !!] 居中对齐上传区域 */
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+}
+
+.custom-uploader-content {
+  /* [!! 移除 !!] height: 300px; */
+  border: 2px dashed var(--el-border-color);
+  border-radius: 8px;
+  background-color: var(--el-fill-color-lightest);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden; /* 裁剪预览图片 */
+  position: relative; /* 确保预览和提示框能正确堆叠 */
+  transition: border-color 0.3s ease;
+  cursor: pointer;
+  /* [!! 修改 !!] 确保宽度适应父容器，并使用 aspect-ratio 保持正方形 */
+  width: 100%; /* 允许它在 max-width 范围内自适应 */
+  max-width: 200px; /* 限制最大宽度 */
+}
+
+.custom-uploader-wrapper :deep(.el-upload:hover .custom-uploader-content) {
+  /* 模拟 Element Plus 的悬停高亮 */
+  border-color: var(--el-color-primary);
+}
+
+/* 状态2: 上传提示 */
+.upload-prompt {
+  text-align: center;
+  color: var(--el-text-color-secondary);
+  position: absolute;
+}
+.upload-prompt .el-icon {
+  font-size: 40px;
+  color: var(--el-text-color-placeholder);
+  margin-bottom: 8px;
+}
+.uploader-text {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+}
+.upload-tip-inline {
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
+  margin-top: 4px;
+}
+
+/* 状态1: 预览容器 */
+.image-preview-container {
+  width: 100%;
+  height: 100%;
+  position: absolute; /* 确保在 Transition 中正确定位 */
+  top: 0;
+  left: 0;
+}
+
+.preview-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s ease;
+  transform-origin: center;
+}
+
+/* 预览图遮罩层 (悬停动效) */
+.image-actions-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.image-preview-container:hover .image-actions-overlay {
+  opacity: 1;
+}
+
+.image-preview-container:hover .preview-image {
+  transform: scale(1.05);
+}
+
+/* 删除图标 (悬停动效) */
+.delete-icon {
+  color: rgba(255, 255, 255, 0.8);
+  transition: transform 0.3s ease;
+  cursor: pointer;
+}
+
+.image-preview-container:hover .delete-icon {
+  transform: scale(1.2);
 }
 </style>

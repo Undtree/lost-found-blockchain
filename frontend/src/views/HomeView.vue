@@ -14,8 +14,8 @@
         @clear="handleClearSearch"
         @keydown.enter="handleSearch"
       >
-        <template #append>
-          <el-button :icon="Search" @click="handleSearch" :loading="loading" />
+        <template #suffix>
+          <el-button :icon="Search" @click="handleSearch" :loading="loading" link />
         </template>
       </el-input>
     </el-col>
@@ -99,7 +99,7 @@
 </template>
 
 <script setup>
-// [!! 核心修改 !!] 导入 computed
+// (Script 保持不变)
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElNotification } from 'element-plus'
@@ -111,25 +111,19 @@ const loading = ref(true)
 const router = useRouter()
 const searchQuery = ref('')
 const isSearchActive = ref(false)
-// [!! 核心修改 !!] 新增状态，用于存储后端返回的阈值
 const activeSearchThreshold = ref(null)
 
 const goToDetail = (id) => {
   router.push(`/item/${id}`)
 }
 
-// [!! 核心修改 !!] 新增计算属性，用于动态显示副标题
 const subtitleText = computed(() => {
   if (!isSearchActive.value) {
     return '所有等待认领的物品';
   }
-
-  // 正在加载时
   if (loading.value) {
     return 'Agent 正在搜索...';
   }
-
-  // 有结果时，根据阈值显示不同信息
   if (items.value.length > 0 && activeSearchThreshold.value) {
     let level = '相关';
     if (activeSearchThreshold.value >= 0.7) {
@@ -139,13 +133,9 @@ const subtitleText = computed(() => {
     }
     return `已找到 ${items.value.length} 个${level}的结果 (阈值 ≥ ${activeSearchThreshold.value})`;
   }
-
-  // 搜索活跃，但无结果 (这种情况会由 el-empty 处理，但保留文本)
   return 'Agent 搜索结果';
 });
 
-
-// fetchItems 函数 (保持不变)
 const fetchItems = async () => {
   loading.value = true
   try {
@@ -159,58 +149,50 @@ const fetchItems = async () => {
   }
 }
 
-// [!! 核心修改 !!] 搜索函数
 const handleSearch = async () => {
   if (!searchQuery.value.trim()) {
     handleClearSearch()
     return
   }
-
   loading.value = true
   isSearchActive.value = true
-  activeSearchThreshold.value = null // [!! 核心修改 !!] 重置阈值
-
+  activeSearchThreshold.value = null
   try {
     const response = await itemService.searchItems(searchQuery.value);
-
-    // [!! 核心修改 !!] 适应新的 API 响应
-    items.value = response.data.data; // items 数组现在是搜索结果
-    activeSearchThreshold.value = response.data.threshold; // 存储命中的阈值
-
+    items.value = response.data.data;
+    activeSearchThreshold.value = response.data.threshold;
   } catch (err) {
     ElNotification.error('Agent 搜索失败: ' + (err.response?.data?.message || err.message));
-    items.value = []; // 搜索失败时清空
+    items.value = [];
   } finally {
     loading.value = false
   }
 }
 
-// [!! 核心修改 !!] 清空搜索函数
 const handleClearSearch = () => {
   searchQuery.value = ''
   isSearchActive.value = false
-  activeSearchThreshold.value = null // [!! 核心修改 !!] 清空阈值
-  fetchItems() // 重新加载所有物品
+  activeSearchThreshold.value = null
+  fetchItems()
 }
 
-// 页面加载时，默认获取所有物品 (不变)
 onMounted(fetchItems)
 </script>
 
 <style scoped>
-/* (所有样式保持不变) */
+/* (大部分样式保持不变) */
 .search-bar-row {
   margin-bottom: 20px;
 }
-.search-bar-row :deep(.el-input-group__append) {
-  background-color: var(--el-color-primary);
-}
-.search-bar-row :deep(.el-input-group__append .el-icon) {
-  color: white;
-}
-.search-bar-row :deep(.el-input-group__append button:hover) {
-  background-color: var(--el-color-primary-light-3);
-}
+
+/* [!! CORE MODIFICATION !!] Removed the :deep styles for .el-input-group__append */
+/* These are no longer needed as we are using the 'suffix' slot */
+/*
+.search-bar-row :deep(.el-input-group__append) { ... }
+.search-bar-row :deep(.el-input-group__append .el-icon) { ... }
+.search-bar-row :deep(.el-input-group__append button:hover) { ... }
+*/
+
 .home-title-block {
   margin-top: 20px;
   margin-bottom: 20px;
@@ -226,7 +208,6 @@ onMounted(fetchItems)
   color: var(--el-text-color-regular);
   margin: 0;
   margin-top: 8px;
-  /* [!! 核心修改 !!] 增加一个最小高度，防止在加载时文本切换导致页面跳动 */
   min-height: 1.2em;
 }
 .image {
@@ -261,7 +242,7 @@ onMounted(fetchItems)
   flex-wrap: wrap;
   gap: 5px;
   margin-bottom: 10px;
-  height: 24px; /* 固定高度防止跳动 */
+  height: 24px;
   overflow: hidden;
 }
 
