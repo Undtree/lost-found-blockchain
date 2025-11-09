@@ -50,7 +50,6 @@
 </template>
 
 <script setup>
-// ... (script 脚本部分完全保持不变) ...
 import { ref, watch, nextTick, toRaw } from 'vue'
 import { ElNotification } from 'element-plus'
 import itemService from '@/api/itemService'
@@ -206,15 +205,9 @@ watch(newMessage, (newMsg) => {
 
 
 <style scoped>
-/* [!! 核心修复 !!]
-  使用 :global() 将这个规则标记为全局
-  它现在在 <style scoped> 内部，HMR 应该能正确处理它
-*/
 :global(.chat-drawer-fix .el-drawer__header) {
   margin-bottom: 0 !important;
 }
-
-/* ... (所有其他样式保持不变) ... */
 
 .chat-wrapper {
   display: flex;

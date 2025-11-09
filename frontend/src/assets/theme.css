@@ -1,6 +1,3 @@
-/* src/assets/theme.css */
-
-/* 定义莫兰迪色系的 CSS 变量 */
 :root {
   --el-color-primary: #7a949a; /* 主色：灰蓝色 */
   --el-color-primary-light-3: #9fb2b7;
@@ -14,7 +11,7 @@
   --el-color-danger: #e07a5f; /* 危险：暗红色 */
   --el-color-info: #aebec0; /* 信息：浅灰蓝 */
 
-  /* 文本颜色也用莫兰迪色系 */
+  /* 文本颜色 */
   --el-text-color-primary: #4a5759;
   --el-text-color-regular: #6b7d7f;
   --el-text-color-secondary: #8e9fa1;
@@ -27,25 +24,24 @@
   --el-border-color-extra-light: #f9fafa;
 }
 
-/* 按钮和卡片的一些通用美化 */
 .el-button {
-  border-radius: 4px; /* 稍微减少圆角 */
+  border-radius: 4px;
   font-weight: 500;
 }
 
 .el-card {
-  border-radius: 8px; /* 卡片圆角，柔和一点 */
-  border: none; /* 移除默认边框 */
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); /* 更柔和的阴影 */
+  border-radius: 8px;
+  border: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .el-input__wrapper,
 .el-textarea__inner {
-  border-radius: 4px; /* 输入框也统一圆角 */
+  border-radius: 4px;
 }
 .el-alert {
   border-radius: 4px;
-  margin-top: 10px; /* 警告框与上面元素的间距 */
+  margin-top: 10px;
 }
 .el-tag {
   border-radius: 4px;

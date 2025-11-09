@@ -128,13 +128,12 @@
 
 <script setup>
 import { ref, reactive, toRaw, onUnmounted } from 'vue'
-import { Plus, CircleClose } from '@element-plus/icons-vue' // 使用 CircleClose 图标
+import { Plus, CircleClose } from '@element-plus/icons-vue'
 import { ElNotification } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { useEthers } from '@/composables/useEthers.js'
 import itemService from '@/api/itemService.js'
 
-// --- 状态定义 ---
 const { account, signer } = useEthers()
 const router = useRouter()
 const formRef = ref(null)
@@ -142,17 +141,17 @@ const uploadRef = ref(null)
 const loading = ref(false)
 const isAnalyzing = ref(false)
 const agentFilledName = ref(false)
-const imageUrlPreview = ref(null) // 用于本地预览的 URL
+const imageUrlPreview = ref(null) // 本地预览 URL
 
 const form = reactive({
   name: '',
   description: '',
   location: '',
   image: null,
-  tags: [], // [!! 3. 新增 Tags 字段 !!]
+  tags: [],
 })
 
-// --- 表单校验 ---
+// 表单校验
 const validateImage = (rule, value, callback) => {
   if (!form.image) {
     callback(new Error('请上传图片'))
@@ -167,9 +166,9 @@ const rules = reactive({
   image: [{ required: true, validator: validateImage, trigger: 'change' }],
 })
 
-// --- el-upload 钩子函数 ---
+// el-upload 钩子函数
 const handleFileChange = async (uploadFile) => {
-  // 1. (不变) 设置本地预览
+  // 1. 设置本地预览
   if (imageUrlPreview.value) {
     URL.revokeObjectURL(imageUrlPreview.value)
   }
@@ -182,17 +181,17 @@ const handleFileChange = async (uploadFile) => {
   isAnalyzing.value = true
   agentFilledName.value = false
 
-  // [!! 2. 新增: 身份验证 !!]
+  // 身份验证
   if (!account.value || !signer.value) {
     ElNotification.error('请先连接钱包才能使用 Agent 分析');
     isAnalyzing.value = false;
-    triggerRemove(); // (重要) 移除上传失败的图片
+    triggerRemove();
     return;
   }
 
-  // [!! 3. 新增: 钱包签名 !!]
+  // 钱包签名
   let signature;
-  // (使用一个唯一的签名消息，防止重放攻击)
+  // 使用唯一的签名消息，防止重放攻击
   const messageToSign = `我 (地址: ${account.value}) 请求 Agent 分析一张图片 (时间: ${Date.now()})`;
   try {
     const rawSigner = toRaw(signer.value);
@@ -206,20 +205,18 @@ const handleFileChange = async (uploadFile) => {
     return;
   }
 
-  // [!! 4. 新增: 准备包含 Auth 的 FormData !!]
+  // 准备 FormData
   const agentFormData = new FormData()
   agentFormData.append('image', uploadFile.raw)
   agentFormData.append('userAddress', account.value)
   agentFormData.append('signature', signature)
   agentFormData.append('signatureMessage', messageToSign)
 
-  // 5. (修改) 调用 API
+  // 5. 调用 API
   try {
-    // (现在发送的是包含 auth 的 agentFormData)
     const res = await itemService.analyzeImage(agentFormData)
     const { name, tags } = res.data.data
 
-    // ... (填充 form.name 和 form.tags 的逻辑不变) ...
     form.name = name
     form.tags = tags
     agentFilledName.value = true
@@ -229,7 +226,6 @@ const handleFileChange = async (uploadFile) => {
     ElNotification.success('Agent 分析完成')
 
   } catch (err) {
-    // ... (错误处理不变) ...
     console.error('Agent analysis failed', err)
     ElNotification.error('Agent 分析失败: ' + (err.response?.data?.message || err.message))
     if (agentFilledName.value) {
@@ -246,22 +242,20 @@ const handleFileChange = async (uploadFile) => {
  * 这个函数现在主要由 triggerRemove 手动调用。
  */
 const handleRemove = () => {
-  // (不变) 释放 URL 内存
   if (imageUrlPreview.value) {
     URL.revokeObjectURL(imageUrlPreview.value)
   }
   form.image = null
   imageUrlPreview.value = null
 
-  // [!! 核心修改: 清理 Agent 字段 !!]
-  // 如果名称是 Agent 填充的，就清空它
+  // 如果名称是 Agent 填充的，就清空
   if (agentFilledName.value) {
-    form.name = '' // [!! 修改 !!]
+    form.name = ''
   }
   form.tags = []
   agentFilledName.value = false
 
-  // (不变) 触发校验
+  // 触发校验
   if (formRef.value) {
     formRef.value.validateField('image').catch(() => { /* ... */ })
   }
@@ -271,7 +265,7 @@ const handleRemove = () => {
  * 自定义删除按钮的点击事件
  */
 const triggerRemove = () => {
-  // 1. 手动调用我们自己的状态清理函数 (会触发UI更新和校验)
+  // 1. 手动调用我们自己的状态清理函数
   handleRemove()
   // 2. 告诉 el-upload 组件也清理它的内部列表
   if (uploadRef.value) {
@@ -283,10 +277,10 @@ const triggerRemove = () => {
  * 文件超出限制钩子 (limit=1)
  */
 const handleExceed = (files) => {
-  // 优化：当超出限制时，直接替换
+  // 当超出限制时，直接替换
   if (uploadRef.value) {
     uploadRef.value.clearFiles() // 清除旧文件
-    uploadRef.value.handleStart(files[0]) // 手动添加新文件（会触发 on-change）
+    uploadRef.value.handleStart(files[0]) // 手动添加新文件
   }
   ElNotification.warning('只能上传一张图片，已自动替换为新图片')
 }
@@ -298,7 +292,7 @@ onUnmounted(() => {
   }
 })
 
-// --- 提交 ---
+// 提交
 const handleSubmit = async () => {
   if (!formRef.value) return
 
@@ -338,7 +332,6 @@ const handleSubmit = async () => {
       formData.append('signature', signature)
       formData.append('signatureMessage', messageToSign)
 
-      // [!! 核心修改: 附加 Tags !!]
       // 将数组转为 JSON 字符串
       formData.append('tags', JSON.stringify(form.tags))
 
@@ -367,20 +360,16 @@ const handleSubmit = async () => {
 </script>
 
 <style scoped>
-/* --- 删除动画 --- */
 .preview-fade-scale-leave-active {
-  /* 离开时的动画 */
   transition:
     opacity 0.3s ease-out,
     transform 0.3s ease-out;
 }
 .preview-fade-scale-leave-to {
-  /* 离开的最终状态 */
   opacity: 0;
-  transform: scale(0.8); /* 缩小一点 */
+  transform: scale(0.8);
 }
 
-/* --- 基础样式 --- */
 .card-header h3 {
   margin: 0;
   font-size: 1.2em;
@@ -393,13 +382,11 @@ const handleSubmit = async () => {
   line-height: 1.5;
 }
 
-/* --- 自定义上传器样式 --- */
 .custom-uploader-wrapper {
   width: 100%;
 }
 
 .custom-uploader-wrapper :deep(.el-upload) {
-  /* 让 el-upload 的根元素撑满容器 */
   display: block;
   width: 100%;
   height: 100%;
@@ -407,29 +394,26 @@ const handleSubmit = async () => {
 
 .custom-uploader-content {
   width: 100%;
-  height: 300px; /* 固定高度，防止跳动 */
+  height: 300px;
   border: 2px dashed var(--el-border-color);
   border-radius: 8px;
   background-color: var(--el-fill-color-lightest);
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden; /* 裁剪预览图片 */
-  position: relative; /* 确保预览和提示框能正确堆叠 */
+  overflow: hidden;
+  position: relative;
   transition: border-color 0.3s ease;
   cursor: pointer;
 }
 
 .custom-uploader-wrapper :deep(.el-upload:hover .custom-uploader-content) {
-  /* 模拟 Element Plus 的悬停高亮 */
   border-color: var(--el-color-primary);
 }
 
-/* 状态2: 上传提示 */
 .upload-prompt {
   text-align: center;
   color: var(--el-text-color-secondary);
-  /* 确保提示框在预览图下方，但 Transition 会处理 v-if/v-else */
   position: absolute;
 }
 .upload-prompt .el-icon {
@@ -447,11 +431,10 @@ const handleSubmit = async () => {
   margin-top: 4px;
 }
 
-/* 状态1: 预览容器 */
 .image-preview-container {
   width: 100%;
   height: 100%;
-  position: absolute; /* 确保在 Transition 中正确定位 */
+  position: absolute;
   top: 0;
   left: 0;
 }
@@ -465,7 +448,6 @@ const handleSubmit = async () => {
   transform-origin: center;
 }
 
-/* 预览图遮罩层 (悬停动效) */
 .image-actions-overlay {
   position: absolute;
   inset: 0;
@@ -485,7 +467,6 @@ const handleSubmit = async () => {
   transform: scale(1.05);
 }
 
-/* 删除图标 (悬停动效) */
 .delete-icon {
   color: rgba(255, 255, 255, 0.8);
   transition: transform 0.3s ease;
@@ -496,7 +477,6 @@ const handleSubmit = async () => {
   transform: scale(1.2);
 }
 
-/* --- 底部和响应式 --- */
 .form-footer {
   display: flex;
   justify-content: right;
@@ -506,7 +486,7 @@ const handleSubmit = async () => {
 
 @media (max-width: 992px) {
   .image-upload-card-wrapper {
-    margin-top: 10px;
+    margin-bottom: 10px;
   }
   .form-footer {
     justify-content: center;

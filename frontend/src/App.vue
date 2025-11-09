@@ -26,40 +26,29 @@
 </template>
 
 <script setup>
-// 脚本部分保持不变
 import { RouterView } from 'vue-router'
 import WalletConnect from './components/WalletConnect.vue'
 </script>
 
 <style scoped>
-/* [!! 核心修改 1 !!]
-   为根布局容器添加 padding-top
-   以防止内容被 fixed 的 header 遮挡
-*/
 .common-layout {
-  min-height: 100vh; /* 确保布局至少占满一屏 */
-  padding-top: 60px; /* 60px 是 header 的高度 */
-  box-sizing: border-box; /* 确保 padding 不会增加总高度 */
+  min-height: 100vh;
+  padding-top: 60px;
+  box-sizing: border-box;
 }
 
-/* [!! 核心修改 2 !!]
-   将 Header 设置为 fixed 定位
-*/
 .app-header {
   border-bottom: 1px solid var(--el-border-color);
   background-color: #fff;
   padding: 0;
   height: var(--el-header-height, 60px);
-
-  /* --- 新增样式 --- */
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
-  z-index: 1000; /* 确保 Header 在最上层 */
+  z-index: 1000;
 }
 
-/* 顶层 Flex 容器 */
 .header-container {
   display: flex;
   align-items: center;
@@ -71,9 +60,6 @@ import WalletConnect from './components/WalletConnect.vue'
   box-sizing: border-box;
 }
 
-/* --- 以下样式保持不变 --- */
-
-/* 左侧 Logo */
 .logo-area {
   font-size: 1.2em;
   font-weight: bold;
@@ -82,7 +68,6 @@ import WalletConnect from './components/WalletConnect.vue'
   flex-shrink: 0;
 }
 
-/* 中间菜单 */
 .header-menu {
   flex-grow: 1;
   flex-shrink: 1;
@@ -90,13 +75,12 @@ import WalletConnect from './components/WalletConnect.vue'
 }
 
 .header-menu.el-menu--horizontal {
-  border-bottom: none; /* 移除 el-menu 自己的下划线 */
+  border-bottom: none;
   display: flex;
   height: 100%;
   justify-content: flex-end;
 }
 
-/* 右侧钱包区域 */
 .wallet-area {
   flex-shrink: 0;
   height: 100%;
@@ -105,9 +89,8 @@ import WalletConnect from './components/WalletConnect.vue'
   margin-left: 15px;
 }
 
-/* --- 页面布局 (主内容/页脚) --- */
 .main-content-wrapper {
-  flex: 1; /* 占据剩余空间 */
+  flex: 1;
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
@@ -121,10 +104,8 @@ import WalletConnect from './components/WalletConnect.vue'
   border-top: 1px solid var(--el-border-color);
   height: auto;
   padding: 20px 0;
-  /* flex-shrink: 0; (如果 footer 也被折叠可以加上这个) */
 }
 
-/* --- 移动端适配 --- */
 @media (max-width: 768px) {
   .header-container {
     padding: 0 15px;

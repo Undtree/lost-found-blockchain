@@ -3,22 +3,22 @@ import { ref } from 'vue'
 import { ethers } from 'ethers'
 import { ElNotification } from 'element-plus'
 
-// --- 1. 定义 Hardhat 的 Chain ID (保持不变) ---
+// 1. 定义 Hardhat 的 Chain ID
 const HARDHAT_CHAIN_ID = '31337'
 
-// --- 2. 全局状态 (保持不变) ---
+// 2. 全局状态
 const provider = ref(null)
 const signer = ref(null)
 const account = ref(null)
 
-// --- 3. 内部断开连接逻辑 (保持不变) ---
+// 3. 内部断开连接逻辑
 function internalDisconnectWallet() {
   provider.value = null
   signer.value = null
   account.value = null
 }
 
-// --- 4. 检查网络的辅助函数 (保持不变) ---
+// 4. 检查网络
 async function checkNetwork(browserProvider) {
   try {
     const network = await browserProvider.getNetwork()
@@ -43,15 +43,14 @@ async function checkNetwork(browserProvider) {
   }
 }
 
-// --- 5. [!! 核心修复 !!] 内部事件监听逻辑 ---
-// [!! 修复 A !!] 函数现在接收“原始的” provider 对象
+// 内部事件监听逻辑
 function setupEventListeners(rawBrowserProvider) {
   if (!window.ethereum) return
 
   window.ethereum.removeAllListeners('accountsChanged')
   window.ethereum.removeAllListeners('chainChanged')
 
-  // [!! 修复 B !!] 监听账户切换 (不再使用 .value)
+  // 监听账户切换
   window.ethereum.on('accountsChanged', async (newAccounts) => {
     if (newAccounts.length === 0) {
       ElNotification.info('您已断开钱包连接')
@@ -59,11 +58,8 @@ function setupEventListeners(rawBrowserProvider) {
     } else {
       account.value = newAccounts[0]
 
-      // [!! 修复 C !!]
-      // 直接使用传入的“原始” provider，而不是 Vue Proxy
       if (rawBrowserProvider) {
         try {
-          // 在“原始”对象上调用 .getSigner() 是安全的
           signer.value = await rawBrowserProvider.getSigner(newAccounts[0])
           ElNotification.success('钱包账户已动态切换')
         } catch (err) {
@@ -72,21 +68,19 @@ function setupEventListeners(rawBrowserProvider) {
           internalDisconnectWallet()
         }
       } else {
-        // 这种情况不应该发生，但作为保险
         ElNotification.error('Provider丢失(listeners)，请刷新页面')
         internalDisconnectWallet()
       }
     }
   })
 
-  // 监听网络切换 (保持不变)
+  // 监听网络切换
   window.ethereum.on('chainChanged', (_chainId) => {
     ElNotification.info('检测到网络切换，正在刷新页面...')
     window.location.reload()
   })
 }
 
-// --- 6. 导出的 `useEthers` 函数 (已修改) ---
 export function useEthers() {
   const connectWallet = async () => {
     try {
@@ -94,7 +88,7 @@ export function useEthers() {
         ElNotification.error('请安装 MetaMask 钱包！')
         return
       }
-      // 1. 创建“原始” provider
+      // 1. 创建 provider
       const browserProvider = new ethers.BrowserProvider(window.ethereum)
 
       const isNetworkCorrect = await checkNetwork(browserProvider)
@@ -106,18 +100,17 @@ export function useEthers() {
       const aSigner = await browserProvider.getSigner()
       const anAccount = await aSigner.getAddress()
 
-      // 2. 将“原始” provider 存入 ref (Vue 会将其转为 Proxy)
+      // 2. 将 provider 存入 ref
       provider.value = browserProvider
       signer.value = aSigner
       account.value = anAccount
 
-      // [!! 修复 D !!] 将“原始” provider 传给监听器
+      // 将 provider 传给监听器
       setupEventListeners(browserProvider)
     } catch (e) {
       console.error('连接钱包失败:', e);
       let message = '连接钱包时发生未知错误。';
 
-      // MetaMask 用户拒绝的标准错误代码
       if (e.code === 4001) {
         message = '您拒绝了钱包连接请求。';
       }
@@ -127,14 +120,12 @@ export function useEthers() {
     }
   }
 
-  const disconnectWallet = () => {
-    /* ... (保持不变) ... */
-  }
+  const disconnectWallet = () => {}
 
   return { connectWallet, disconnectWallet, provider, signer, account }
 }
 
-// --- 7. [!! 核心修复 !!] 自动连接逻辑 (已重构) ---
+// 自动连接逻辑
 const autoConnectOnPageLoad = async () => {
   if (!window.ethereum) {
     console.log('MetaMask not installed.')
@@ -142,11 +133,10 @@ const autoConnectOnPageLoad = async () => {
   }
 
   try {
-    // 1. 在所有操作之前，创建“原始” provider
+    // 1. 在所有操作之前，创建 provider
     const browserProvider = new ethers.BrowserProvider(window.ethereum)
 
-    // [!! 修复 E !!] 立即将“原始” provider 传给监听器
-    // 这样即使用户未连接，切换网络/账户也能被正确处理
+    // 立即将 provider 传给监听器，这样即使用户未连接，切换网络/账户也能被正确处理
     setupEventListeners(browserProvider)
 
     // 2. 检查网络
@@ -163,7 +153,7 @@ const autoConnectOnPageLoad = async () => {
       const anAccount = accounts[0]
       const aSigner = await browserProvider.getSigner(anAccount)
 
-      // 4. 将“原始” provider 存入 ref (Vue 会将其转为 Proxy)
+      // 4. 将 provider 存入 ref
       provider.value = browserProvider
       signer.value = aSigner
       account.value = anAccount
@@ -177,5 +167,5 @@ const autoConnectOnPageLoad = async () => {
   }
 }
 
-// 立即执行自动连接检查
+// 立即执行自动连接
 autoConnectOnPageLoad()

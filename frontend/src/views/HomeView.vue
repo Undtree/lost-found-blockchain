@@ -99,7 +99,6 @@
 </template>
 
 <script setup>
-// (Script 保持不变)
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElNotification } from 'element-plus'
@@ -180,19 +179,9 @@ onMounted(fetchItems)
 </script>
 
 <style scoped>
-/* (大部分样式保持不变) */
 .search-bar-row {
   margin-bottom: 20px;
 }
-
-/* [!! CORE MODIFICATION !!] Removed the :deep styles for .el-input-group__append */
-/* These are no longer needed as we are using the 'suffix' slot */
-/*
-.search-bar-row :deep(.el-input-group__append) { ... }
-.search-bar-row :deep(.el-input-group__append .el-icon) { ... }
-.search-bar-row :deep(.el-input-group__append button:hover) { ... }
-*/
-
 .home-title-block {
   margin-top: 20px;
   margin-bottom: 20px;
@@ -245,7 +234,6 @@ onMounted(fetchItems)
   height: 24px;
   overflow: hidden;
 }
-
 .description-text {
   color: var(--el-text-color-regular);
   font-size: 14px;

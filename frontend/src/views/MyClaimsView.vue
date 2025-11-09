@@ -88,9 +88,7 @@ const formattedAccount = computed(() => {
   return ''
 })
 
-/**
- * [!! 核心 !!] 拉取 "我申请的" 物品
- */
+// 拉取 "我申请的" 物品
 const fetchMyClaims = async () => {
   if (!account.value) {
     loading.value = false
@@ -126,9 +124,8 @@ const goToDetail = (id) => {
   router.push(`/item/${id}`)
 }
 
-/**
- * 辅助函数：获取物品的总体状态
- */
+
+// 获取物品认领状态
 const getItemStatusDetails = (status) => {
   switch (status) {
     case 'available':
@@ -142,9 +139,7 @@ const getItemStatusDetails = (status) => {
   }
 }
 
-/**
- * 辅助函数：获取 "我" 在这个物品上的申请状态
- */
+// 辅助函数：获取自己在这个物品上的申请状态
 const getMyClaimStatusDetails = (item) => {
   if (!account.value || !item.claims) return null
   const myClaim = item.claims.find(
@@ -166,7 +161,6 @@ const getMyClaimStatusDetails = (item) => {
 </script>
 
 <style scoped>
-/* (大部分样式从 MyItemsView 复制) */
 .page-title-block {
   margin-top: 20px;
   margin-bottom: 20px;
@@ -209,22 +203,18 @@ const getMyClaimStatusDetails = (item) => {
   -webkit-box-orient: vertical;
   word-break: break-all;
 }
-
-/* [!! 核心修改: 调整 footer 布局 !!] */
 .card-footer {
   margin-top: 15px;
   display: flex;
   justify-content: space-between;
-  align-items: flex-end; /* 底部对齐 */
+  align-items: flex-end;
 }
-
 .status-tags {
   display: flex;
   flex-direction: column;
-  align-items: flex-start; /* 左对齐 */
-  gap: 8px; /* 移除内联 style, 用 gap 代替 */
+  align-items: flex-start;
+  gap: 8px;
 }
-/* (卡片悬停动效) */
 .el-col :deep(.el-card) {
   transition:
     transform 0.25s ease-out,

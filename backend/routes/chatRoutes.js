@@ -1,16 +1,15 @@
 const express = require('express');
 const { ethers } = require('ethers');
 const Item = require('../models/item');
-const Message = require('../models/message'); // 引入 Message 模型
+const Message = require('../models/message');
 
 const router = express.Router();
 
-// [!! 修改 !!] GET /items/:id/messages -> POST /items/:id/messages
+// POST /items/:id/messages - 发送消息
 router.post('/items/:id/messages', async (req, res) => {
   const { id: itemId } = req.params;
-  const { userAddress, signature, signatureMessage } = req.body; // [!! 修改 !!] 从 body 获取
+  const { userAddress, signature, signatureMessage } = req.body;
 
-  // --- 安全验证 (这部分逻辑不变，已经很完美) ---
   if (!userAddress || !signature || !signatureMessage) {
     return res.status(403).json({ message: '缺少身份验证签名' });
   }

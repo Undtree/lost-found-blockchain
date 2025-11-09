@@ -1,6 +1,3 @@
-/* src/assets/main.css (或 base.css) */
-
-/* 1. 全局基础样式 (重置) */
 html,
 body,
 #app {
@@ -14,43 +11,38 @@ body,
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* 2. 灰色背景和 Flex 布局 (之前错误地放在 App.vue) */
 .common-layout {
   min-height: 100%;
-  background-color: #f4f5f7; /* Element Plus 的标准背景灰 */
+  background-color: #f4f5f7;
   display: flex;
   flex-direction: column;
 }
 
-/* 3. 内容区居中 (之前错误地放在 App.vue) */
 .main-content-wrapper {
-  max-width: 1200px; /* 限制最大宽度 */
-  margin: 20px auto; /* 上下 20px 边距，左右 auto (实现居中) */
+  max-width: 1200px;
+  margin: 20px auto;
   padding: 20px;
   width: 100%;
-  box-sizing: border-box; /* 保证 padding 和 width 协同工作 */
-  flex-grow: 1; /* 占据剩余空间，把 footer 推到底部 */
+  box-sizing: border-box;
+  flex-grow: 1;
 }
 
-/* 4. 页脚 (之前错误地放在 App.vue) */
 .app-footer {
   text-align: center;
   color: #909399;
   padding: 20px 0;
   border-top: 1px solid #e4e7ed;
   background-color: #fff;
-  margin-top: auto; /* 确保它在内容不足时也贴在底部 */
+  margin-top: auto;
 }
 
-/* 5. 响应式：手机上减少边距 */
 @media (max-width: 768px) {
   .main-content-wrapper {
     padding: 10px;
-    margin: 10px auto; /* 手机上也居中 */
+    margin: 10px auto;
   }
 }
 
-/* "out" 阶段: 元素离开 (例如: 骨架屏淡出) */
 .page-content-fade-leave-active {
   transition: opacity 0.15s ease-in;
 }
@@ -58,17 +50,13 @@ body,
   opacity: 0;
 }
 
-/* "in" 阶段: 元素进入 (例如: 内容卡片淡入) */
 .page-content-fade-enter-active {
   transition:
     opacity 0.4s ease-out,
     transform 0.4s ease-out;
-  /* 延迟 0.15s, 等待 "leave" (0.15s) 动画结束
-    这是 mode="out-in" 的最佳实践
-  */
   transition-delay: 0.15s;
 }
 .page-content-fade-enter-from {
   opacity: 0;
-  transform: translateY(15px); /* 从下方 15px 处滑入 */
+  transform: translateY(15px);
 }

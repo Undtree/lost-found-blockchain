@@ -1,7 +1,7 @@
 // src/api/itemService.js
 import axios from 'axios'
 
-// 你的后端 API 地址
+// 后端 API 地址
 const API_URL = 'http://localhost:3001/api'
 
 const apiClient = axios.create({
@@ -25,7 +25,6 @@ export default {
   },
 
   updateItem(id, itemData) {
-  // 因为可能包含文件上传，我们使用 multipart/form-data
     return apiClient.put(`/items/${id}`, itemData, {
       headers: {
         'Content-Type': 'multipart/form-data'
@@ -139,11 +138,10 @@ export default {
   },
 
   /**
-   * 使用 AI 向量搜索物品
+   * 使用向量搜索物品
    * @param {string} query - 用户的搜索词
    */
   searchItems(query) {
-    // 使用 URL search parameters ( ?q=... ) 发送 GET 请求
     return apiClient.get('/items/search', {
       params: {
         q: query

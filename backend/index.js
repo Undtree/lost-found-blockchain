@@ -1,37 +1,36 @@
 require('dotenv').config()
 
-// 1. 引入 express
 const express = require('express');
 const mongoose = require('mongoose');
 const itemRoutes = require('./routes/itemRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const cors = require('cors');
 const multer = require('multer');
-const http = require('http'); // 引入 Node.js 内置的 http 模块
-const { Server } = require("socket.io"); // 引入 Socket.IO 的 Server 类
-const Message = require('./models/message'); // 引入 Message 模型
-const { ethers } = require('ethers'); // 引入 ethers
-const Item = require('./models/item'); // 引入 Item
+const http = require('http');
+const { Server } = require("socket.io");
+const Message = require('./models/message');
+const { ethers } = require('ethers');
+const Item = require('./models/item');
 
-// 2. 创建应用对象
+// 1. 创建应用对象
 const app = express();
 app.use(cors());
 const server = http.createServer(app); 
 
-// 3. 定义一个端口号
-const port = 3001; // 前端React/Vue项目默认经常使用3000
+// 2. 定义一个端口号
+const port = 3001;
 
 const path = require('path');
 
-// 4. 初始化 Socket.IO，并配置 CORS
+// 3. 初始化 Socket.IO，并配置 CORS
 const io = new Server(server, {
   cors: {
-    origin: "http://localhost:3000", // 指定前端的 URL
+    origin: "http://localhost:3000",
     methods: ["GET", "POST"]
   }
 });
 
-// [!! 3. 核心安全修复：Socket.IO 认证中间件 !!]
+// Socket.IO 认证中间件
 io.use(async (socket, next) => {
   const { signature, message } = socket.handshake.auth;
 
@@ -40,10 +39,10 @@ io.use(async (socket, next) => {
   }
 
   try {
-    // 1. 验证签名，恢复地址
+    // 验证签名，恢复地址
     const recoveredAddress = ethers.verifyMessage(message, signature);
     
-    // 2. 将验证通过的地址附加到 socket 对象上，以供后续使用
+    // 将验证通过的地址附加到 socket 对象上，以供后续使用
     socket.userAddress = recoveredAddress;
     next(); // 验证通过，放行
   } catch (err) {
@@ -52,12 +51,12 @@ io.use(async (socket, next) => {
   }
 });
 
-// 5. 设置 Socket.IO 的连接监听逻辑
+// 4. 设置 Socket.IO 的连接监听逻辑
 io.on('connection', (socket) => {
-  // 此时的 socket 对象已经包含了 socket.userAddress
+  // 此时 socket 对象已经包含 socket.userAddress
   console.log('一个用户已认证连接:', socket.userAddress);
 
-  // [!! 4. 核心安全修复：'joinRoom' 事件添加授权 !!]
+  // 'joinRoom' 事件需要授权
   socket.on('joinRoom', async (itemId) => {
     try {
       const user = socket.userAddress.toLowerCase();
@@ -65,7 +64,7 @@ io.on('connection', (socket) => {
       // 1. 检查用户是否有权加入这个房间
       const item = await Item.findById(itemId);
       if (!item) {
-        socket.emit('error', { message: '房间未找到' }); // [!! 5. 使用 'error' 事件 !!]
+        socket.emit('error', { message: '房间未找到' });
         return;
       }
 
@@ -87,14 +86,14 @@ io.on('connection', (socket) => {
     }
   });
 
-  // [!! 7. 核心安全修复：'sendMessage' 事件使用服务器端地址 !!]
+  // 'sendMessage' 事件使用服务器端地址
   socket.on('sendMessage', async (data) => {
     try {
-      // 不再信任客户端发来的 senderAddress
+      // 不信任客户端发来的 senderAddress
       const senderAddress = socket.userAddress; 
       const { conversationId, receiverAddress, content } = data;
 
-      // (可选，但推荐) 再次验证该用户是否真的属于这个房间
+      // 再次验证该用户是否真的属于这个房间
       if (!socket.rooms.has(conversationId)) {
         return socket.emit('messageError', { message: '你不在这个房间，无法发送消息' });
       }
@@ -102,7 +101,7 @@ io.on('connection', (socket) => {
       // a. 将消息保存到数据库
       const newMessage = new Message({
         conversationId,
-        senderAddress, // 使用服务器验证过的地址
+        senderAddress,
         receiverAddress,
         content
       });
@@ -142,17 +141,17 @@ app.use((err, req, res, next) => {
       });
     }
   } else if (err) {
-    // 捕获我们在 fileFilter 中自定义的错误
+    // 捕获在 fileFilter 中自定义的错误
     if (err.message) {
       return res.status(400).json({ message: err.message });
     }
   }
 
-  // 如果不是我们预期的错误，交给 Express 的默认处理器
+  // 其他错误交给 Express 默认处理
   next(err);
 });
 
-// --- 连接 MongoDB ---
+// 连接 MongoDB
 const dbURI = 'mongodb://localhost:27017/lost-and-found';
 
 mongoose.connect(dbURI)
@@ -166,9 +165,7 @@ mongoose.connect(dbURI)
   .catch((err) => {
     console.log('Failed to connect to MongoDB database:', err);
   });
-// --------------------
 
-// 当有人访问服务器的根路径 (/) 时，执行回调函数
 app.get('/', (req, res) => {
   res.send('The server for Lost & Found is running...');
 });

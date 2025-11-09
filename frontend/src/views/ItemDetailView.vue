@@ -413,7 +413,6 @@ import itemService from '@/api/itemService.js'
 import ContractABI from '@/contracts/LostItemNFT.json'
 import ChatDrawer from '@/components/ChatDrawer.vue'
 
-// --- 状态定义 ---
 const route = useRoute()
 const item = ref(null)
 const loading = ref(true)
@@ -431,7 +430,6 @@ const CONTRACT_ADDRESS = '0x5FbDB2315678afecb367f032d93F642f64180aa3' // 确保�
 
 const isChatDrawerVisible = ref(false)
 
-// --- [!! 核心修复 !!] ---
 // 监听账户变化，如果抽屉是打开的，则自动关闭它
 watch(account, (newAccount, oldAccount) => {
   if (!isChatDrawerVisible.value) {
@@ -440,21 +438,16 @@ watch(account, (newAccount, oldAccount) => {
   }
 
   // 检查：
-  // 1. oldAccount 必须存在 (忽略初始连接时 null -> 0x...)
-  // 2. newAccount 不存在 (用户断开连接)
-  // 3. 或者 newAccount 与 oldAccount 不一样 (用户切换了账户)
+  // 1. oldAccount 必须存在
+  // 2. newAccount 不存在，用户断开连接
+  // 3. 或者 newAccount 与 oldAccount 不一样，用户切换了账户
   if (oldAccount && (!newAccount || newAccount.toLowerCase() !== oldAccount.toLowerCase())) {
     ElNotification.info('钱包账户已更改或断开，聊天已自动关闭。')
     isChatDrawerVisible.value = false
-    // isChatDrawerVisible 变化会触发 ChatDrawer 的 @closed 事件
-    // @closed 事件会调用 handleDrawerClose
-    // handleDrawerClose 会调用 disconnectSocket()，完成清理
   }
 })
-// --- [!! 修复结束 !!] ---
 
-
-// --- 预览器状态 (保持不变) ---
+// 预览器状态
 const isPreviewVisible = ref(false)
 const openPreview = () => { isPreviewVisible.value = true }
 const closePreview = () => { isPreviewVisible.value = false }
@@ -471,7 +464,7 @@ onUnmounted(() => {
   }
 })
 
-// --- 修改弹窗相关状态 ---
+// 详细信息修改弹窗相关状态
 const editDialogVisible = ref(false)
 const editLoading = ref(false)
 const editFormRef = ref(null)
@@ -481,11 +474,10 @@ const editForm = ref({
   location: '',
   tags: []
 })
-const editFile = ref(null) // 用于存储新的文件对象
+const editFile = ref(null) // 存储新的文件对象
 const editUploadRef = ref(null) // el-upload 组件的 ref
-const editImageUrlPreview = ref(null) // 用于新版上传器的预览 URL
+const editImageUrlPreview = ref(null) // 上传器的预览 URL
 
-// --- 计算属性 (保持不变) ---
 const isFinder = computed(() => {
   return (
     account.value &&
@@ -548,7 +540,6 @@ const losterToShow = computed(() => {
   return ''
 })
 
-// --- 核心方法 ---
 const fetchItem = async () => {
   const id = route.params.id
   if (!id) {
@@ -568,7 +559,7 @@ const fetchItem = async () => {
 }
 onMounted(fetchItem)
 
-// --- (Loster) 提交申请 (保持不变) ---
+// 提交申请
 const handleSubmitApplication = async () => {
   if (!secretMessage.value) {
     ElNotification.error('请输入关键信息')
@@ -621,9 +612,7 @@ const handleSubmitApplication = async () => {
   }
 }
 
-// --- (Finder) 方法 ---
-
-// 阶段一：链下批准
+// Finder 链下批准
 const handleApproveStage1 = async (claim) => {
   approveLoadingId.value = claim._id;
 
@@ -648,7 +637,7 @@ const handleApproveStage1 = async (claim) => {
     return
   }
 
-  // 2. 发送到后端 (新 API)
+  // 2. 发送到后端
   try {
     const response = await itemService.approveClaim(
       item.value._id,
@@ -659,7 +648,7 @@ const handleApproveStage1 = async (claim) => {
         signatureMessage: messageToSign
       }
     );
-    item.value = response.data.data; // 更新 item (状态变为 pending_handover)
+    item.value = response.data.data; // 更新 item状态，变为 pending_handover
     ElNotification.success('已批准！请等待线下交接');
   } catch (err) {
     ElNotification.error({
@@ -673,7 +662,7 @@ const handleApproveStage1 = async (claim) => {
 
 // 回滚：取消交接
 const handleCancelHandover = async () => {
-  cancelLoadingId.value = true; // 只有一个取消按钮，用布尔值即可
+  cancelLoadingId.value = true;
 
   if (!signer.value || !account.value) {
     ElNotification.error('请先连接你的钱包！')
@@ -696,7 +685,7 @@ const handleCancelHandover = async () => {
     return
   }
 
-  // 2. 发送到后端 (新 API)
+  // 2. 发送到后端
   try {
     const response = await itemService.cancelHandover(
       item.value._id,
@@ -706,7 +695,7 @@ const handleCancelHandover = async () => {
         signatureMessage: messageToSign
       }
     );
-    item.value = response.data.data; // 更新 item (状态变回 available)
+    item.value = response.data.data; // 更新 item 状态，变回 available
     ElNotification.warning('交接已取消，物品已重新开放审核');
   } catch (err) {
     ElNotification.error({
@@ -718,7 +707,7 @@ const handleCancelHandover = async () => {
   }
 }
 
-// 阶段二：链上交割
+// Finder 链上交割
 const handleApproveStage2_Finalize = async (claim) => {
   const losterAddressToReceive = claim.applierAddress
   const itemToClaim = item.value
@@ -808,7 +797,7 @@ const handleApproveStage2_Finalize = async (claim) => {
   }
 }
 
-// (Finder) 拒绝
+// Finder 拒绝申请
 const handleReject = async (claim) => {
   const claimToReject = claim;
   rejectLoadingId.value = claimToReject._id;
@@ -858,16 +847,15 @@ const handleReject = async (claim) => {
   }
 }
 
-// --- 修改物品相关方法 ---
+// 修改物品信息相关方法
 const openEditDialog = () => {
-  // 使用 item 的当前数据深拷贝填充表单
   editForm.value = {
     name: item.value.name,
     description: item.value.description,
     location: item.value.location,
-    tags: [...item.value.tags] // 确保是数组的拷贝
+    tags: [...item.value.tags]
   }
-  // 设置新版上传器的预览为当前图片
+  // 设置上传器的预览为当前图片
   editImageUrlPreview.value = item.value.imageUrl
   // 重置可能已选择的新文件
   editFile.value = null
@@ -879,18 +867,17 @@ const openEditDialog = () => {
   editDialogVisible.value = true
 }
 
-// (from UploadView) :on-exceed
+// :on-exceed
 const handleEditExceed = (files) => {
   if (editUploadRef.value) {
     editUploadRef.value.clearFiles() // 清除旧文件
-    editUploadRef.value.handleStart(files[0]) // 手动添加新文件（会触发 on-change）
+    editUploadRef.value.handleStart(files[0]) // 手动添加新文件
   }
   ElNotification.warning('只能上传一张图片，已自动替换为新图片')
 }
 
-// (from UploadView) :on-change
+// :on-change
 const handleEditFileChange = (uploadFile) => {
-  // Revoke old blob URL if it exists
   if (editImageUrlPreview.value && editImageUrlPreview.value.startsWith('blob:')) {
     URL.revokeObjectURL(editImageUrlPreview.value)
   }
@@ -898,16 +885,16 @@ const handleEditFileChange = (uploadFile) => {
   editImageUrlPreview.value = URL.createObjectURL(uploadFile.raw)
 }
 
-// (from UploadView) 内部删除逻辑
+// 内部删除逻辑
 const handleEditRemove = () => {
   if (editImageUrlPreview.value && editImageUrlPreview.value.startsWith('blob:')) {
     URL.revokeObjectURL(editImageUrlPreview.value)
   }
   editFile.value = null
-  editImageUrlPreview.value = null // Shows the '+' prompt
+  editImageUrlPreview.value = null
 }
 
-// (from UploadView) 'x' 图标的点击处理
+// 'x' 图标点击处理
 const triggerEditRemove = () => {
   handleEditRemove()
   if (editUploadRef.value) {
@@ -951,10 +938,9 @@ const handleUpdateItem = async () => {
       formData.append('finderAddress', account.value)
       formData.append('signature', signature)
       formData.append('signatureMessage', messageToSign)
-      // Tags 需要字符串化
       formData.append('tags', JSON.stringify(editForm.value.tags))
 
-      // 如果用户选择了新文件 (editFile.value)，则添加到 FormData
+      // 如果用户选择了新文件，则添加到 FormData
       if (editFile.value) {
         formData.append('image', editFile.value)
       }
@@ -983,7 +969,7 @@ const handleUpdateItem = async () => {
 </script>
 
 <style scoped>
-/* Finder 聊天按钮的容器 */
+/* Finder 聊天按钮容器 */
 .finder-chat-button {
   margin-bottom: 20px;
   padding-bottom: 20px;
@@ -995,12 +981,11 @@ const handleUpdateItem = async () => {
   overflow: hidden;
 }
 
-/* 移除 action-divider, 改用 action-card-wrapper */
 .action-card-wrapper {
   margin-top: 10px;
 }
 
-/* 1. 详情卡片内样式 */
+/* 详情卡片内样式 */
 .detail-image {
   width: 100%;
   height: 400px;
@@ -1071,7 +1056,7 @@ const handleUpdateItem = async () => {
   word-break: break-all;
 }
 
-/* 2. 响应式布局 */
+/* 响应式布局 */
 @media (max-width: 992px) {
   .image-card-wrapper {
     margin-bottom: 10px;
@@ -1084,7 +1069,7 @@ const handleUpdateItem = async () => {
   }
 }
 
-/* 3. 'action-area' 相关样式 */
+/* 'action-area' 相关样式 */
 .action-area-title {
   font-size: 1.1em;
   font-weight: 600;
@@ -1104,11 +1089,11 @@ const handleUpdateItem = async () => {
 .tags-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px; /* 替代 margin */
-  align-items: center; /* 垂直居中对齐 */
+  gap: 8px;
+  align-items: center;
 }
 
-/* 4. 预览器相关样式 (保持不变) */
+/* 预览器相关样式 */
 .image-container {
   position: relative;
   cursor: pointer;
@@ -1196,19 +1181,14 @@ const handleUpdateItem = async () => {
   margin-bottom: 20px;
 }
 
-/* --- 从 UploadView.vue 复制的样式 --- */
-
-/* --- 删除动画 --- */
 .preview-fade-scale-leave-active {
-  /* 离开时的动画 */
   transition:
     opacity 0.3s ease-out,
     transform 0.3s ease-out;
 }
 .preview-fade-scale-leave-to {
-  /* 离开的最终状态 */
   opacity: 0;
-  transform: scale(0.8); /* 缩小一点 */
+  transform: scale(0.8);
 }
 
 .upload-tip {
@@ -1217,45 +1197,40 @@ const handleUpdateItem = async () => {
   line-height: 1.5;
 }
 
-/* --- 自定义上传器样式 --- */
+/* 上传器样式 */
 .custom-uploader-wrapper {
   width: 100%;
 }
 
 .custom-uploader-wrapper :deep(.el-upload) {
-  /* 让 el-upload 的根元素撑满容器 */
   display: block;
   width: 100%;
   height: 100%;
-  /* [!! 新增 !!] 居中对齐上传区域 */
   display: flex;
   justify-content: flex-start;
   align-items: center;
 }
 
 .custom-uploader-content {
-  /* [!! 移除 !!] height: 300px; */
   border: 2px dashed var(--el-border-color);
   border-radius: 8px;
   background-color: var(--el-fill-color-lightest);
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden; /* 裁剪预览图片 */
-  position: relative; /* 确保预览和提示框能正确堆叠 */
+  overflow: hidden;
+  position: relative;
   transition: border-color 0.3s ease;
   cursor: pointer;
-  /* [!! 修改 !!] 确保宽度适应父容器，并使用 aspect-ratio 保持正方形 */
-  width: 100%; /* 允许它在 max-width 范围内自适应 */
-  max-width: 200px; /* 限制最大宽度 */
+  width: 100%;
+  max-width: 200px;
 }
 
 .custom-uploader-wrapper :deep(.el-upload:hover .custom-uploader-content) {
-  /* 模拟 Element Plus 的悬停高亮 */
   border-color: var(--el-color-primary);
 }
 
-/* 状态2: 上传提示 */
+/* 上传提示 */
 .upload-prompt {
   text-align: center;
   color: var(--el-text-color-secondary);
@@ -1276,11 +1251,11 @@ const handleUpdateItem = async () => {
   margin-top: 4px;
 }
 
-/* 状态1: 预览容器 */
+/* 预览容器 */
 .image-preview-container {
   width: 100%;
   height: 100%;
-  position: absolute; /* 确保在 Transition 中正确定位 */
+  position: absolute;
   top: 0;
   left: 0;
 }
@@ -1294,7 +1269,7 @@ const handleUpdateItem = async () => {
   transform-origin: center;
 }
 
-/* 预览图遮罩层 (悬停动效) */
+/* 预览图遮罩层 */
 .image-actions-overlay {
   position: absolute;
   inset: 0;
@@ -1314,7 +1289,7 @@ const handleUpdateItem = async () => {
   transform: scale(1.05);
 }
 
-/* 删除图标 (悬停动效) */
+/* 删除图标 */
 .delete-icon {
   color: rgba(255, 255, 255, 0.8);
   transition: transform 0.3s ease;

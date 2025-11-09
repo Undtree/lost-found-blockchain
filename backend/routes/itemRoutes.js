@@ -2,16 +2,15 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { ethers } = require('ethers');
-const multer = require('multer'); // 引入 multer
-const Item = require('../models/item'); // 引入 Item 模型
+const multer = require('multer'); 
+const Item = require('../models/item');
 const rateLimit = require('express-rate-limit');
 const cosineSimilarity = require('cosine-similarity');
 const { analyzeImage, getTextEmbedding } = require('../utils/aiApi');
 
-// 创建一个路由实例
 const router = express.Router();
 
-// 配置：从环境变量读取 RPC、私钥和合约地址
+// 从.env文件读取 RPC、私钥和合约地址
 const RPC_URL = process.env.RPC_URL || 'http://127.0.0.1:8545';
 const PRIVATE_KEY = process.env.PRIVATE_KEY || '';
 const CONTRACT_ADDRESS = process.env.CONTRACT_ADDRESS || '';
@@ -46,16 +45,13 @@ function getContract(signerOrProvider) {
   return new ethers.Contract(CONTRACT_ADDRESS, contractAbi, signerOrProvider);
 }
 
-// 当合约未配置时提供错误信息
 function contractNotReady(res) {
   return res.status(500).json({
     message: '合约未配置或 ABI 缺失。请检查 .env 文件 (PRIVATE_KEY, CONTRACT_ADDRESS)'
   });
 }
 
-// --- 配置 Multer ---
-
-// 定义一个文件过滤器函数
+// 配置 Multer
 const imageFileFilter = (req, file, cb) => {
   const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/heif', 'image/webp'];
   if (allowedMimes.includes(file.mimetype)) {
@@ -88,24 +84,23 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024 // 限制文件大小为 5MB
+    fileSize: 5 * 1024 * 1024 // 图片最大 5MB
   },
   fileFilter: imageFileFilter
 });
-// ------
 
+// AI 图片分析限制
 const aiAnalysisLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 分钟的窗口期
-  max: 10, // 每个 IP 在 15 分钟内最多只能请求 10 次
+  windowMs: 15 * 60 * 1000,
+  max: 10,
   message: {
     message: '你提交的 Agent 分析请求过多，请 15 分钟后再试。'
   },
-  standardHeaders: true, // 返回 RateLimit-* 相关的 HTTP 头
-  legacyHeaders: false, // 禁用 X-RateLimit-* 旧版头
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
-// [!! 核心修改: POST /items/analyze-image 路由 !!]
-// (添加了签名验证守卫)
+// POST /items/analyze-image - 请求图片 AI 分析
 router.post('/items/analyze-image', aiAnalysisLimiter, upload.single('image'), async (req, res) => {
   // 1. 从 req.body 获取身份验证数据
   // (Multer 会处理 multipart/form-data, 文本字段在 req.body, 文件在 req.file)
@@ -116,14 +111,14 @@ router.post('/items/analyze-image', aiAnalysisLimiter, upload.single('image'), a
     return res.status(400).json({ message: '必须上传物品图片 (字段名: image)' });
   }
 
-  // 3. [!! 新增 !!] 验证身份签名
+  // 3. 验证身份签名
   if (!userAddress || !signature || !signatureMessage) {
     // 验证失败，删除已上传的临时文件
     try { fs.unlinkSync(req.file.path); } catch (e) { /* 忽略 */ }
     return res.status(403).json({ message: '缺少身份验证签名 (Signature)' });
   }
 
-  // 4. [!! 新增 !!] 验证签名是否匹配
+  // 4. 验证签名是否匹配
   let recoveredAddress;
   try {
     recoveredAddress = ethers.verifyMessage(signatureMessage, signature);
@@ -139,12 +134,11 @@ router.post('/items/analyze-image', aiAnalysisLimiter, upload.single('image'), a
     });
   }
   
-  // 5. [!! 验证通过 !!]
-  // (只有验证通过了，才执行昂贵的 AI 分析)
+  // 5. 验证通过
   try {
     const { name, tags } = await analyzeImage(req.file.path);
     
-    // 分析完成后，删除这个临时文件
+    // 分析完成后，删除临时文件
     try {
       fs.unlinkSync(req.file.path);
     } catch (unlinkErr) {
@@ -166,13 +160,13 @@ router.post('/items/analyze-image', aiAnalysisLimiter, upload.single('image'), a
   }
 });
 
-// [!! 核心修改: POST /items/upload 路由 !!]
+// POST /items/upload - 上传物品信息
 router.post('/items/upload', upload.single('image'), async (req, res) => {
   // 1. 从 req 中获取所有数据
   const { 
     name, description, location, finderAddress, 
     signature, signatureMessage,
-    tags // [!! a. 接收新字段 (Tags) !!]
+    tags
   } = req.body;
   
   // 2. 检查基本字段
@@ -183,7 +177,7 @@ router.post('/items/upload', upload.single('image'), async (req, res) => {
     return res.status(400).json({ message: '缺少字段 (name, description, location, finderAddress)' });
   }
 
-  // 3. 安全验证守卫
+  // 3. 验证身份签名
   if (!signature || !signatureMessage) {
     return res.status(403).json({ message: '缺少身份验证签名 (Signature)' });
   }
@@ -202,17 +196,13 @@ router.post('/items/upload', upload.single('image'), async (req, res) => {
     });
   }
   
-  // 5. 验证通过
-  
-  // [!! b. 解析 Tags !!]
+  // 5. 验证通过，解析 tags
   let parsedTags = [];
   if (tags) {
     try {
-      // 假设前端发送的是 JSON 字符串数组 '["tag1", "tag2"]'
       parsedTags = JSON.parse(tags); 
       if (!Array.isArray(parsedTags)) parsedTags = [];
     } catch (e) {
-      // 备选方案：或者是逗号分隔的字符串 "tag1,tag2"
       parsedTags = tags.split(',').map(t => t.trim()).filter(t => t);
     }
   }
@@ -225,7 +215,7 @@ router.post('/items/upload', upload.single('image'), async (req, res) => {
     image: imageUrl,
     attributes: [
       { "trait_type": "Location", "value": location },
-      // [!! c. 将 tags 添加到元数据 !!]
+      // 将 tags 添加到元数据
       ...parsedTags.map(tag => ({ "trait_type": "Tag", "value": tag }))
     ]
   };
@@ -286,7 +276,7 @@ router.post('/items/upload', upload.single('image'), async (req, res) => {
     metadataUrl,
     tokenId,
     status: 'available',
-    tags: parsedTags, // [!! d. 保存 Tags 到 DB !!]
+    tags: parsedTags,
     // embedding 默认为 []
     // claims 默认为 []
   });
@@ -316,7 +306,7 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
     finderAddress, signature, signatureMessage, tags 
   } = req.body;
 
-  // 1. 验证签名 (确保操作者是他们声称的那个人)
+  // 1. 验证签名
   if (!finderAddress || !signature || !signatureMessage) {
     return res.status(403).json({ message: '缺少所有者身份验证签名' });
   }
@@ -337,7 +327,7 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
       return res.status(404).json({ message: '未找到物品' });
     }
 
-    // 3. [核心安全检查] 验证签名者是否为物品的当前所有者
+    // 3. 验证签名者是否为物品的当前所有者
     if (item.finderAddress.toLowerCase() !== finderAddress.toLowerCase()) {
       return res.status(403).json({ message: '你不是该物品的所有者，无权修改' });
     }
@@ -354,7 +344,7 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
 
     // 如果有新图片上传，则更新图片 URL
     if (req.file) {
-      // (可选) 在更新前删除旧图片以节省空间
+      // 在更新前删除旧图片，节省空间
       if (item.imageUrl) {
         try {
           const oldImagePath = path.join(uploadDir, path.basename(item.imageUrl));
@@ -367,7 +357,7 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
     }
 
     // 更新 tags
-    let parsedTags = item.tags; // 默认为旧 tags
+    let parsedTags = item.tags;
     if (tags) {
         try {
             parsedTags = JSON.parse(tags);
@@ -378,7 +368,7 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
     }
     item.tags = parsedTags;
     
-    // 6. 重新生成并更新元数据文件 (Metadata)
+    // 6. 重新生成并更新元数据文件
     const newMetadata = {
       name: item.name,
       description: item.description,
@@ -388,7 +378,7 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
         ...item.tags.map(tag => ({ "trait_type": "Tag", "value": tag }))
       ]
     };
-    // (可选) 删除旧的元数据文件
+    // 删除旧的元数据文件
     if (item.metadataUrl) {
         try {
           const oldMetadataPath = path.join(metadataDir, path.basename(item.metadataUrl));
@@ -403,7 +393,7 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
     fs.writeFileSync(metadataPath, JSON.stringify(newMetadata, null, 2));
     item.metadataUrl = newMetadataUrl;
     
-    // 7. [链上交互] 更新 Token URI
+    // 7. 更新 Token URI
     const provider = getProvider();
     const signer = getSigner(provider);
     const contract = signer ? getContract(signer) : null;
@@ -411,16 +401,12 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
 
     if (contract) {
         try {
-            // 注意：智能合约的 updateTokenURI 需要由当前 owner 调用
-            // 我们的 signer 是服务器，所以我们需要修改合约，或者让前端直接调用
-            // 假设合约允许 MINTER_ROLE 更新，或者让前端签名交易
-            // 这里我们用服务器的 signer 调用
             const tx = await contract.updateTokenURI(item.tokenId, newMetadataUrl);
             const receipt = await tx.wait();
             txHash = receipt.hash;
         } catch(chainErr) {
             console.error('更新 Token URI 失败:', chainErr);
-            // 即使链上失败，我们依然保存数据库的更改，但会返回警告
+            // 链上失败，依然保存数据库的更改，但返回警告
             const updatedItem = await item.save();
             return res.status(200).json({
                 message: '物品信息已在数据库中更新，但同步到区块链失败',
@@ -448,7 +434,7 @@ router.put('/items/:id', upload.single('image'), async (req, res) => {
 });
 
 
-// DELETE /items/:id - 删除（归档）物品信息
+// TODO: DELETE /items/:id - 删除物品信息，这个路由没有使用到
 router.delete('/items/:id', async (req, res) => {
   const { id: itemId } = req.params;
   const { finderAddress, signature, signatureMessage } = req.body;
@@ -474,7 +460,7 @@ router.delete('/items/:id', async (req, res) => {
       return res.status(404).json({ message: '未找到物品' });
     }
 
-    // 3. [核心安全检查] 验证签名者是否为物品的当前所有者
+    // 3. 验证签名者是否为物品的当前所有者
     if (item.finderAddress.toLowerCase() !== finderAddress.toLowerCase()) {
       return res.status(403).json({ message: '你不是该物品的所有者，无权删除' });
     }
@@ -484,13 +470,12 @@ router.delete('/items/:id', async (req, res) => {
         return res.status(400).json({ message: `物品处于 "${item.status}" 状态，无法删除` });
     }
     
-    // 5. [核心操作] 执行软删除：将状态更新为 'archived'
+    // 5. 执行软删除，将状态更新为 'archived'
     item.status = 'archived';
     const archivedItem = await item.save();
 
-    // 我们不在链上执行任何操作 (如 burn)。NFT 依然存在，
+    // 不在链上执行任何操作。NFT 依然存在，
     // 只是在我们的应用层面上，这个物品不再可见或可操作。
-    // 这保留了完整的历史记录。
 
     res.status(200).json({ message: '物品已成功归档', data: archivedItem });
 
@@ -510,10 +495,10 @@ async function generateAndSaveEmbedding(savedItem) {
     // 1. 准备文本
     const textToEmbed = savedItem.name + " " + savedItem.tags.join(" ");
     
-    // 2. (耗时操作) 调用 AI
+    // 2. 调用 AI
     const embedding = await getTextEmbedding(textToEmbed);
 
-    // 3. (数据库 I/O) 更新数据库
+    // 3. 更新数据库
     await Item.findByIdAndUpdate(savedItem._id, {
       $set: { embedding: embedding }
     });
@@ -521,13 +506,11 @@ async function generateAndSaveEmbedding(savedItem) {
     console.log(`[后台任务] 成功为 Item ID: ${savedItem._id} 保存向量。`);
 
   } catch (embedErr) {
-    // 因为这个任务是后台运行的，用户不会看到这个错误
-    // 所以我们必须在服务器日志中记录它！
     console.error(`[后台任务] 为 Item ID: ${savedItem._id} 生成向量失败:`, embedErr.message);
   }
 }
 
-// GET /api/items/search 路由
+// GET /api/items/search - 首页搜索物品
 router.get('/items/search', async (req, res) => {
   const { q } = req.query; 
 
@@ -545,7 +528,7 @@ router.get('/items/search', async (req, res) => {
       embedding: { $exists: true, $ne: [] } 
     }).select('_id name description location imageUrl status tokenId tags createdAt embedding');
 
-    // 3. 在 Node.js 内存中计算余弦相似度
+    // 3. 计算余弦相似度
     const scoredItems = items.map(item => {
       if (!item.embedding || item.embedding.length === 0) {
         return { item, score: 0 };
@@ -559,34 +542,33 @@ router.get('/items/search', async (req, res) => {
       return itemObject;
     });
 
-    // 4. [!! 核心修改 !!] 按分数从高到低排序 (在过滤前执行)
+    // 4. 按分数从高到低排序
     scoredItems.sort((a, b) => b.score - a.score);
 
-    // 5. [!! 核心修改 !!] 定义分级阈值 (从高到低)
+    // 5. 定义阈值
     const THRESHOLDS = [0.30, 0.25, 0.20]; // [高匹配, 中匹配, 低匹配]
     
     let finalResults = [];
-    let activeThreshold = null; // 记录当前生效的阈值
+    let activeThreshold = null; // 当前生效的阈值
 
-    // 6. [!! 核心修改 !!] 遍历阈值，查找第一个能返回结果的级别
+    // 6. 遍历阈值，查找第一个能返回结果的级别
     for (const threshold of THRESHOLDS) {
-      // 过滤出大于等于当前阈值的结果
       const results = scoredItems.filter(item => item.score >= threshold);
       
       // 如果这一级别有结果
       if (results.length > 0) {
         finalResults = results;       // 采用这一档的结果
-        activeThreshold = threshold;  // 记录我们使用的是哪个阈值
-        break;                      // [重要] 停止查找，不再降级
+        activeThreshold = threshold;  // 记录使用的是哪个阈值
+        break;
       }
     }
     
-    // 7. [!! 核心修改 !!] 返回结果和所用的阈值
+    // 7. 返回结果和所用的阈值
     // 如果连最低的 0.25 都没匹配到，finalResults 会是 [], activeThreshold 会是 null
     res.status(200).json({ 
       message: '搜索成功', 
       data: finalResults,
-      threshold: activeThreshold // (例如: 0.7, 0.5, 0.25 或 null)
+      threshold: activeThreshold
     });
 
   } catch (err) {
@@ -649,7 +631,7 @@ router.get('/items/my-claims/:address', async (req, res) => {
   }
 });
 
-// POST /items/:id/claim-db 路由
+// POST /items/:id/claim-db - Finder 交割后回调
 router.post('/items/:id/claim-db', async (req, res) => {
   const { losterAddress } = req.body;
   const { id } = req.params; 
@@ -712,14 +694,14 @@ router.post('/items/:id/claim-db', async (req, res) => {
   }
 });
 
-// POST /items/:id/submit-claim 路由
+// POST /items/:id/submit-claim - 提交认领申请
 router.post('/items/:id/submit-claim', async (req, res) => {
   const { id } = req.params;
   const { applierAddress, secretMessage, signature, signatureMessage } = req.body;
 
   if (!applierAddress || !secretMessage || !signature || !signatureMessage) {
     return res.status(400).json({ message: '缺少字段 (applierAddress, secretMessage, signature, signatureMessage)' });
-C-A}
+  }
 
   let recoveredAddress;
   try {
@@ -912,7 +894,7 @@ router.post('/items/:id/cancel-handover', async (req, res) => {
   }
 });
 
-// POST /items/:id/chat-target 路由
+// POST /items/:id/chat-target - 获取聊天目标地址
 router.post('/items/:id/chat-target', async (req, res) => {
   const { id: itemId } = req.params;
   const { userAddress, signature, signatureMessage } = req.body;
@@ -969,5 +951,4 @@ router.post('/items/:id/chat-target', async (req, res) => {
   }
 });
 
-// 导出路由实例
 module.exports = router;

@@ -1,4 +1,3 @@
-// utils/aiApi.js
 const fs = require('fs');
 const path = require('path');
 const { OpenAI } = require('openai');
@@ -9,20 +8,19 @@ const openai = new OpenAI({
   baseURL: process.env.OPENAI_API_BASE_URL,
 });
 
-// 辅助函数：根据文件路径获取 MIME 类型
+// 根据文件路径获取 MIME 类型
 function getMimeType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
   if (ext === '.png') return 'image/png';
   if (ext === '.webp') return 'image/webp';
-  // 默认或添加更多
   return 'image/jpeg';
 }
 
 /**
  * 使用 OpenAI-compatible API 分析本地图片
  * @param {string} imagePath - 图片在服务器上的临时路径
- * @returns {Promise<{name: string, tags: string[]}>}  <-- [!! 注意: 返回值是 name !!]
+ * @returns {Promise<{name: string, tags: string[]}>}
  */
 async function analyzeImage(imagePath) {
   try {
@@ -31,13 +29,12 @@ async function analyzeImage(imagePath) {
     const imageBase64 = imageBuffer.toString('base64');
     const mimeType = getMimeType(imagePath);
     
-    // 2. 构造 OpenAI Vision API (GPT-4o / GPT-4V) 请求
+    // 2. 构造 OpenAI Vision API 请求
     const response = await openai.chat.completions.create({
-      model: "gpt-4o", // 你使用的模型
+      model: "gpt-4o",
       response_format: { type: "json_object" }, 
       messages: [
         {
-          // [!! 这里的提示是正确的, 要求 'name' !!]
           role: "system",
           content: `你是一个失物招领 DApp 的AI助手。你的任务是分析图片并返回一个 JSON 对象:
 1.  'name': 对物品外观的**通用性描述**（约 10-20 字），**必须使用中文**。
@@ -65,19 +62,17 @@ async function analyzeImage(imagePath) {
           ],
         },
       ],
-      max_tokens: 300, // 限制 token 数量以节省成本
+      max_tokens: 300,
     });
 
     // 3. 解析 AI 返回的 JSON 字符串
     const jsonResponse = response.choices[0].message.content;
     const parsedData = JSON.parse(jsonResponse);
 
-    // [!! 核心修复: 检查 'name' !!]
     if (!parsedData.name || !Array.isArray(parsedData.tags)) {
         throw new Error("Agent 返回了无效的 JSON 格式 (缺少 name 或 tags)");
     }
 
-    // [!! 核心修复: 返回 'name' !!]
     return {
       name: parsedData.name,
       tags: parsedData.tags
@@ -98,7 +93,7 @@ async function analyzeImage(imagePath) {
 async function getTextEmbedding(text) {
   try {
     const response = await openai.embeddings.create({
-      model: "text-embedding-3-small", // [!! 核心 !!] 使用专用的嵌入模型
+      model: "text-embedding-3-small",
       input: text.replace(/\n/g, ' '), // 清理文本中的换行符
     });
 

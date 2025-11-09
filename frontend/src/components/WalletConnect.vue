@@ -18,7 +18,6 @@
 <script setup>
 import { computed } from 'vue'
 import { useEthers } from '@/composables/useEthers.js'
-// 确保你的 Logo 路径正确
 import metamaskLogo from '@/assets/images/MetaMask-logo-black.svg'
 
 const { connectWallet, account } = useEthers()
@@ -34,7 +33,7 @@ const formattedAccount = computed(() => {
 <style scoped>
 .wallet-connect-wrapper {
   display: flex;
-  flex-direction: column; /* 允许警告框在下方显示 */
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100%;
@@ -42,9 +41,8 @@ const formattedAccount = computed(() => {
 
 .wallet-logo-button {
   background: none;
-  /* 使用主题色作为边框 */
   border: 2px solid var(--el-border-color-light);
-  border-radius: 50%; /* 圆形按钮 */
+  border-radius: 50%;
   padding: 6px;
   cursor: pointer;
   display: flex;
@@ -54,7 +52,7 @@ const formattedAccount = computed(() => {
   transition: all 0.2s ease;
 }
 .wallet-logo-button:hover {
-  border-color: var(--el-color-primary); /* 悬停时使用主题色 */
+  border-color: var(--el-color-primary);
 }
 
 .metamask-logo {
@@ -64,7 +62,7 @@ const formattedAccount = computed(() => {
 
 /* 已连接时的样式 */
 .wallet-logo-button.connected {
-  border-color: var(--el-color-success); /* 绿色边框 */
+  border-color: var(--el-color-success);
 }
 
 /* 连接状态的绿点 */

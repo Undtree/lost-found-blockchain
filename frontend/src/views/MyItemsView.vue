@@ -59,7 +59,6 @@
 </template>
 
 <script setup>
-// [!! 1. 导入 onMounted !!]
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -68,7 +67,7 @@ import { useEthers } from '@/composables/useEthers.js'
 
 const { account } = useEthers()
 const items = ref([])
-const loading = ref(true) // (保持不变)
+const loading = ref(true)
 const router = useRouter()
 
 const formattedAccount = computed(() => {
@@ -97,15 +96,11 @@ const fetchMyItems = async () => {
   }
 }
 
-// [!! 2. (新增) 使用 onMounted 来处理初始加载 !!]
-// 这确保了 fetchMyItems() 在第一次渲染 (显示 skeleton) 之后才执行
 onMounted(() => {
   fetchMyItems()
 })
 
-// [!! 3. (修改) watch 现在只处理动态变化 !!]
-// (移除了 { immediate: true })
-// 这用于处理用户在页面上 "连接钱包" 或 "断开钱包" 的操作
+// 处理用户在页面上 "连接钱包" 或 "断开钱包" 的操作
 watch(account, (newAccount, oldAccount) => {
   if (newAccount !== oldAccount) {
     fetchMyItems()
@@ -118,7 +113,6 @@ const goToDetail = (id) => {
 </script>
 
 <style scoped>
-/* (可以从 HomeView 复制样式) */
 .page-title-block {
   margin-top: 20px;
   margin-bottom: 20px;

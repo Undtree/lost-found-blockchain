@@ -122,10 +122,9 @@ describe("LostItemNFT 合约测试", function () {
     });
   });
 
-  // 测试 4: 更新 URI (修改后)
+  // 测试 4: 更新 URI
   describe("更新元数据 (updateTokenURI)", function () {
       
-      // 辅助函数，保持不变
       async function mintOneItemFixture() {
         const { nft, deployer, finder, tokenURI, loster, randomUser, MINTER_ROLE } = await loadFixture(deployLostItemNFTFixture);
         await nft.connect(deployer).mintItem(finder.address, tokenURI);
@@ -138,7 +137,7 @@ describe("LostItemNFT 合约测试", function () {
         const { nft, deployer } = await loadFixture(mintOneItemFixture);
         const tokenId = 1;
 
-        // 使用 deployer (拥有 MINTER_ROLE) 来调用
+        // 使用拥有 MINTER_ROLE 的 deployer 来调用
         await nft.connect(deployer).updateTokenURI(tokenId, newTokenURI);
         
         // 验证 URI 是否已更新
